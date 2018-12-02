@@ -1,0 +1,33 @@
+Open each CSV in Notepad and Crtl + H (Find and Replace)
+
+Remove the comma in the following:
+MEM,FAM -> MEM FAM
+CHILDREN'S,CHOICE -> CHILDERN'S CHOICE
+LEE,DAVIS -> LEE DAVIS
+
+Now do the oppisite (add a comma) to the following:
+CHILDREN'S CHOICE NEWRVR (MP) -> CHILDREN'S CHOICE, NEWRVR (MP)
+EE DAVIS PEDIATRICS(MP) -> EE DAVIS, PEDIATRICS(MP)
+
+Finally:
+Replace | with "
+
+
+X12 and X13 are places of service.  The should be one column but they almost all use a comma.  Issues arise with this is null because the null is one column.
+
+First check to see if X12 is null
+
+n_miss(claims$X12)
+
+See if X14 is in the format [Letter][Number]( it should only return a few ZZ1.11, otherwise we got messes)
+claims$X14 %>% str_subset("^.\\D")
+
+See if X38 has any numbers in it (it should not and return character(0), if it returns "0" we got messes)
+claims$X38 %>% str_subset("^\\d")
+
+
+
+
+FY13, FY15, FY16 does not have X12 nulls, does not need to be seperated into df and df2
+
+FY14, FY17, FY18 do have x12 nulls
