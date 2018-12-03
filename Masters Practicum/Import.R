@@ -16,7 +16,15 @@ clean16 <- clean(claims16)
 clean17 <- clean(claims17)
 clean18 <- clean(claims18)
 
+clean13$YEAR <- 2013 
+clean14$YEAR <- 2014 
+clean15$YEAR <- 2015 
+clean16$YEAR <- 2016 
+clean17$YEAR <- 2017 
+clean18$YEAR <- 2018 
+
 rm(claims13, claims14,claims15, claims16, claims17, claims18)
+
 
 saveRDS(clean13, "Data/clean13.RDS")
 saveRDS(clean14, "Data/clean14.RDS")
@@ -32,7 +40,10 @@ saveRDS(clean18, "Data/clean18.RDS")
 # clean17 <- readRDS("Data/clean17.RDS")
 # clean18 <- readRDS("Data/clean18.RDS")
 
+
 claimsCleanFull <- bind_rows(clean13, clean14, clean15, clean16, clean17, clean18)
+
+claimsCleanFull$YEAR <- as.factor(claimsCleanFull$YEAR)
 
 rm(clean13,clean14, clean15, clean16, clean17, clean18)
 
@@ -41,7 +52,7 @@ claimsCleanFull <- claimsCleanFull %>% mutate_if(is.character, as.factor)
 glimpse(claimsCleanFull)
 summary(claimsCleanFull)
 
-#saveRDS(claimsCleanFull, "Data/claimsCleanFull.RDS")
+saveRDS(claimsCleanFull, "Data/claimsCleanFull.RDS")
 
 sapply(claimsCleanFull, nlevels)
 
