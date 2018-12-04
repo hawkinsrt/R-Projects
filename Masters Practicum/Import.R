@@ -16,6 +16,7 @@ clean16 <- clean(claims16)
 clean17 <- clean(claims17)
 clean18 <- clean(claims18)
 
+
 clean13$YEAR <- 2013 
 clean14$YEAR <- 2014 
 clean15$YEAR <- 2015 
@@ -24,7 +25,6 @@ clean17$YEAR <- 2017
 clean18$YEAR <- 2018 
 
 rm(claims13, claims14,claims15, claims16, claims17, claims18)
-
 
 saveRDS(clean13, "Data/clean13.RDS")
 saveRDS(clean14, "Data/clean14.RDS")
@@ -49,12 +49,13 @@ rm(clean13,clean14, clean15, clean16, clean17, clean18)
 
 claimsCleanFull <- claimsCleanFull %>% mutate_if(is.character, as.factor)
 
-glimpse(claimsCleanFull)
-summary(claimsCleanFull)
+names(claimsCleanFull) <- header <- c('MRN_ALIAS','MEMBER_SEX','MEMBER_AGE','CLAIM_NUM','CLAIM_SEQ','EPISODE_SEQ',
+                                      'CURR_STATUS','SERVICE_TYPE','MASTER_VENDOR_PROV_ID','VENDOR_PROV_ID','PCP_ID',
+                                      'MED_PRAC','CODE_1','CODE_2','CODE_3','CODE_4','CODE_5','CODE_6','CODE_7',
+                                      'CODE_8','CODE_9','CODE_10','CODE_11','CODE_12','CODE_13','CODE_14','CODE_15',
+                                      'CODE_16','CODE_17','CODE_18','APPROVED_AMT','APPROVED_DAYS','PLACE_OF_SERVICE',
+                                      'PLACE_OF_SERVICE_DESC','TYPE_OF_BILL','TOB_CATEGORY','PATIENT_TYPE',
+                                      'CLAIM_TYPE','PREVENTABILITY','ED_NOT_NEEDED_PROP','UNCLASSIFIED_ED',
+                                      'ED_DISCHARGE_DX_DESC','YEAR')
 
-saveRDS(claimsCleanFull, "Data/claimsCleanFull.RDS")
-
-sapply(claimsCleanFull, nlevels)
-
-
-
+saveRDS(claims, "C:/Users/hawkinsrt/Desktop/Data/claimsCleanFull.RDS")
