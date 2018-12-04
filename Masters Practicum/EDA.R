@@ -71,10 +71,11 @@ claims %>%
   group_by(ED_DISCHARGE_DX_DESC) %>% 
   summarize(Total_Cases = n()) %>% 
   arrange(desc(Total_Cases)) %>% 
-  head(n = 10) %>% 
+  head(n = 50) %>% 
   ggplot(aes(fct_reorder(ED_DISCHARGE_DX_DESC,Total_Cases), Total_Cases,fill = fct_reorder(ED_DISCHARGE_DX_DESC,Total_Cases)))+
   geom_col()+
   coord_flip()+
+  labs(x='Top 50 ED Not Needed ED claims')+
   theme(legend.position="none")
 
   
