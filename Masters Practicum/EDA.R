@@ -1,14 +1,18 @@
 library(tidyverse)
-library(naniar)
 library(scales)
 
 # Read in file
-#claims <- readRDS("Data/claimsCleanFull.RDS")
-claims <- readRDS("C:/Users/hawkinsrt/Desktop/Data/claimsCleanFull.RDS")
+claims <- readRDS("Data/claimsCleanFull.RDS")
+#claims <- readRDS("C:/Users/hawkinsrt/Desktop/Data/claimsCleanFull.RDS")
 # Glimspe at the structure of claims
 glimpse(claims)
 # View summary of columns, takes some time to run
-summary(claims)
+summary
+# Round Percentages so you can use them as sudo 'bins'
+claims<- claims %>% 
+            mutate(P_CEIL =  plyr::round_any(PREVENTABILITY, .1, ceiling),
+                   ED_CEIL = plyr::round_any(ED_NOT_NEEDED_PROP,.1, ceiling),
+                   UN_CEIL = plyr::round_any(UNCLASSIFIED_ED, .1,ceiling))
 # See how many level each factor column has
 claims %>%
   select_if(is.factor) %>%
@@ -32,20 +36,12 @@ claims %>%
   nrow()
 # Diagnosis with an PREVENTABILITY = 1
 claims %>%
-  select(ED_DISCHARGE_DX_DESC,PATIENT_TYPE, PREVENTABILITY, ED_NOT_NEEDED_PROP) %>%
-  filter(PREVENTABILITY == 1 & PATIENT_TYPE == 'ED') %>%
+  select(ED_DISCHARGE_DX_DESC,PATIENT_TYPE, PREVENTABILITY) %>%
+  filter(PREVENTABILITY == 1) %>%
   group_by(ED_DISCHARGE_DX_DESC) %>%
-  summarize(PREVENTABILITY = mean(PREVENTABILITY),
-            ED_NOT_NEEDED_PROP = mean(ED_NOT_NEEDED_PROP)) %>%
+  summarize(PREVENTABILITY = mean(PREVENTABILITY)) %>%
   arrange(desc(PREVENTABILITY)) %>%
   View('Preventable')
-# Diagnosis with an ED_NOT_NEEDED_PROP = 1
-EDNN %>%
-  group_by(ED_DISCHARGE_DX_DESC) %>%
-  summarize(PREVENTABILITY = mean(PREVENTABILITY),
-            ED_NOT_NEEDED_PROP = mean(ED_NOT_NEEDED_PROP)) %>%
-  arrange(desc(PREVENTABILITY)) %>%
-  View('ER Not Needed')
 # Diagnosis wjere PREVENTABILITY + ED_NOT_NEEDED_PROP != 1
 claims %>%
   select(ED_DISCHARGE_DX_DESC,PATIENT_TYPE, PREVENTABILITY, ED_NOT_NEEDED_PROP) %>%
@@ -68,25 +64,39 @@ claims %>%
   theme(legend.position="none")
 # Most comman ER diagnosis
 claims %>%
-  select(ED_DISCHARGE_DX_DESC,PATIENT_TYPE, PREVENTABILITY, ED_NOT_NEEDED_PROP, APPROVED_AMT, YEAR) %>%
-  filter(PATIENT_TYPE == 'ED' & (ED_NOT_NEEDED_PROP == 1 | PREVENTABILITY == 1)) %>%
+  select(ED_DISCHARGE_DX_DESC,PATIENT_TYPE, PREVENTABILITY,APPROVED_AMT, YEAR) %>%
+  filter(PATIENT_TYPE == 'ED' & (PREVENTABILITY == 1)) %>%
   group_by(ED_DISCHARGE_DX_DESC) %>%
   summarize(Total_Cases = n()) %>%
   arrange(desc(Total_Cases)) %>%
-  head(n = 50) %>%
+  head(n = 25) %>%
   ggplot(aes(fct_reorder(ED_DISCHARGE_DX_DESC,Total_Cases), Total_Cases,fill = fct_reorder(ED_DISCHARGE_DX_DESC,Total_Cases)))+
   geom_col()+
   coord_flip()+
-  labs(x = 'Diagnosis', title = 'Top 50 ER Not Needed Diagnoses')+
+  labs(x = 'Diagnosis', title = 'Top Preventable Diagnoses')+
   theme(legend.position="none")
 # Age distrbution of Unneeded and prevnetable ER
 claims %>%
   select(PATIENT_TYPE, PREVENTABILITY, ED_NOT_NEEDED_PROP, MEMBER_AGE, CLAIM_NUM, MEMBER_SEX) %>%
-  filter(PATIENT_TYPE == 'ED' & (ED_NOT_NEEDED_PROP == 1 | PREVENTABILITY == 1)) %>%
+  filter(PATIENT_TYPE == 'ED' & (PREVENTABILITY == 1)) %>%
   ggplot(aes(MEMBER_AGE)) +
   geom_histogram(binwidth = 1)+
   facet_wrap(~MEMBER_SEX)+
-  labs(title='Age distriction of Preventable or Uneeded ER Visist', x = 'Age', y = NULL)
+  labs(title='Age distriction of Preventable', x = 'Age', y = NULL)
+# Distribution of PREVENTIBLITY score
+claims %>% 
+  #filter(PATIENT_TYPE == 'ED') %>% 
+  ggplot(aes(PREVENTABILITY))+
+  geom_histogram(bins = 10)
+# Distribution of ED_NOT_NEEDED score
+claims %>% 
+  #filter(PATIENT_TYPE == 'ED') %>%
+  ggplot(aes(ED_NOT_NEEDED_PROP))+
+  geom_histogram(bins = 10)
+# Distributino of UNCLASSIFIED_ED
+claims %>% 
+  ggplot(aes(UNCLASSIFIED_ED))+
+  geom_histogram(bins = 10)
 # Most Unneeded or Preventable ER visitors
 claims %>%
   select(ED_DISCHARGE_DX_DESC,PATIENT_TYPE, PREVENTABILITY, ED_NOT_NEEDED_PROP, APPROVED_AMT, YEAR, MRN_ALIAS) %>%
@@ -114,10 +124,11 @@ claims %>%
   labs(x = 'Member', title = 'Top 50 Most Clostly Members', subtitle = 'Money spent on uneeded or preventable ER visits')+
   scale_y_continuous(labels = dollar_format())+
   theme(legend.position="none")
-# 98D3D44BDEB2 as the most unneeded or prevnetable visits and the most costly
+# 98D3D44BDEB2 has the most unneeded or prevnetable visits and the most costly
 claims %>%
   select(MRN_ALIAS, CLAIM_SEQ, EPISODE_SEQ,ED_DISCHARGE_DX_DESC, PREVENTABILITY,ED_NOT_NEEDED_PROP,
          UNCLASSIFIED_ED, PATIENT_TYPE,CLAIM_TYPE,PLACE_OF_SERVICE_DESC, TOB_CATEGORY) %>%
   filter(MRN_ALIAS == '98D3D44BDEB2',PATIENT_TYPE == 'ED' & (ED_NOT_NEEDED_PROP == 1 | PREVENTABILITY == 1)) %>%
   arrange(MRN_ALIAS, CLAIM_SEQ, EPISODE_SEQ) %>%
   View('#1 ER Lover')
+
