@@ -1,5 +1,8 @@
+# Run Import1.R if you are taking the ClaimHeaderClean.csv files and cleaning them in R.  If you have the clean.RDS files use
+# Import2.R
+
 library(tidyverse)
-library(naniar)
+
 source("Custom Functions.R")
 
 claims13 <- read_csv('Data/FY13 ClaimHeaderClean.csv', col_names = FALSE, na = c("NULL"))
