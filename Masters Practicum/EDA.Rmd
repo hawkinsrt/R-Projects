@@ -104,11 +104,6 @@ claims %>%
 
 I noticed '23C9A67453F9' only has one claim with an EPISODE_SEQ of 29,000.  This is clearly an outlier and should be remove from analysis.  It can be left in for exploration that does not relate to EPISODE_SEQ.
 
-```{r}
-claims %>% 
-  filter(MRN_ALIAS == '23C9A67453F9') %>% 
-  arrange(CLAIM_SEQ, EPISODE_SEQ) 
-```
 
 The two columns of most importance are PREVENTABILITY and ED_NOT_NEEDED.  They share some commonality but for the purpose of this analysis should be consider separately.  ED visits for a diagnosis with PREVENTABILITY of 1 indicates ED visit is required but could have been prevented entirely through routine check ups with a PCP.  ED visits for a diagnosis with a ED_NOT_NEEDED of 1 indicates the condition was not life threatening and treatable at an Urgent Care facility.
 
@@ -298,10 +293,11 @@ Lets take a closer look at the #1 ED Lover (or ED hater depending on how you loo
 ```{r}
 # 98D3D44BDEB2 has the most unneeded or prevnetable visits and the most costly
 claims %>%
-  select(MRN_ALIAS, CLAIM_SEQ, EPISODE_SEQ,ED_DISCHARGE_DX_DESC, PREVENTABILITY,ED_NOT_NEEDED_PROP,
-         UNCLASSIFIED_ED, SERVICE_TYPE,CLAIM_TYPE,PLACE_OF_SERVICE_DESC, TOB_CATEGORY) %>%
-  filter(MRN_ALIAS == '98D3D44BDEB2',SERVICE_TYPE == 'ED' & (ED_NOT_NEEDED_PROP == 1 | PREVENTABILITY == 1)) %>%
-  arrange(MRN_ALIAS, CLAIM_SEQ, EPISODE_SEQ) 
+  filter(MRN_ALIAS == '98D3D44BDEB2',SERVICE_TYPE == 'ED' &
+        (ED_NOT_NEEDED_PROP == 1 | PREVENTABILITY == 1)) %>%
+  arrange(MRN_ALIAS, CLAIM_SEQ, EPISODE_SEQ) %>% 
+  select(MEMBER_AGE, MEMBER_SEX,CLAIM_SEQ,EPISODE_SEQ,ED_DISCHARGE_DX_DESC,PREVENTABILITY,
+         ED_NOT_NEEDED_PROP, UNCLASSIFIED_ED, SERVICE_TYPE)
 ```
 
 
