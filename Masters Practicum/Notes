@@ -25,9 +25,5 @@ claims$X14 %>% str_subset("^.\\D")
 See if X38 has any numbers in it (it should not and return character(0), if it returns "0" we got messes)
 claims$X38 %>% str_subset("^\\d")
 
-
-
-
-FY13, FY15, FY16 does not have X12 nulls, does not need to be seperated into df and df2
-
-FY14, FY17, FY18 do have x12 nulls
+Anaylsis first steps:
+My first objective is to get familar with the data and start trimming down the variables to a more manageable amount. I am only going to focus on CODE_1 which is also captured in the more informative ED_DISCHARGE_DX_DESC so I will remove all 18 CODE_* columns.  Next I think I will just keep PLACE_OF_SERVIC_DESC and get rid of the numerical counterpart PLACE_OF_SERVICE.  PLACE_OF_SERVICE has 50 factor levels while PLACE_OF_SERVICE_DESC has 45 so its not a 1 to 1 relationship.  I think PLACE_OF_SERVICE_DESC will suffice for now.  I don't see any need for CURR_STATUS or SERVICE(REFFERAL)_TYPE.  VP already stated the SERVICE_TYPE is outside the scope of this project and I don't see the value in CURR_STATUS currently. 

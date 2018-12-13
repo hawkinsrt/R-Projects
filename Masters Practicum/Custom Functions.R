@@ -16,7 +16,7 @@ clean <- function (claims){
   claimsClean <- bind_rows(df,df2)
   
   claimsClean <- claimsClean %>% 
-                  mutate_at(c("X3","X5","X6","X31","X32","X39","X40","X41"), as.numeric) %>% 
+                  mutate_at(c("X3","X5","X6","X9", "X10","X11","X31","X32","X39","X40","X41"), as.numeric) %>% 
                   mutate_if(is.character,as.factor)
   return(claimsClean)
   

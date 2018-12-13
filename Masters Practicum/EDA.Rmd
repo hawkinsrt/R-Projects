@@ -1,0 +1,303 @@
+---
+title: "EDA of Claims"
+author: "Ryan Hawkins"
+date: "December 5, 2018"
+output: 
+  html_document:
+    theme: cosmo
+    highlight: monochrome
+    toc: true
+    toc_float: false
+    toc_depth: 4
+    code_folding: show
+    df_print: kable
+editor_options:
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, fig.width = 10)
+```
+
+##Important steps prior to exploration
+
+If this is your first time running this code, Create a folder call Data in the project folder and place RDS files in there then source Import2.R FIRST to format your RDS files correctly does take a while to run, this is normal
+source("Import2.R").  This is a vital step to ensure columns names and column types are the same.
+
+```{r message=FALSE, warning=FALSE}
+library(tidyverse)
+library(scales)
+```
+
+##Data Import
+
+Read in the data
+
+```{r}
+claimsFull <- readRDS("Data/claimsCleanFull.RDS")
+```
+
+##Factor Levels
+
+Check out the levels of all factor variables
+
+```{r}
+claimsFull %>%
+  select_if(is.factor) %>%
+  map(nlevels) %>%
+  unlist()
+```
+
+## Analysis First Steps
+
+My first objective is to get familiar with the data and start trimming down the variables to a more manageable amount. I am only going to focus on CODE_1 which is also captured in the more informative ED_DISCHARGE_DX_DESC so I will remove all 18 CODE_* columns.  Next I think I will just keep PLACE_OF_SERVIC_DESC and get rid of the numerical counterpart PLACE_OF_SERVICE.  PLACE_OF_SERVICE has 50 factor levels while PLACE_OF_SERVICE_DESC has 45 so its not a 1 to 1 relationship.  I think PLACE_OF_SERVICE_DESC will suffice for now.  I don't see any need for CURR_STATUS or REFFERAL_TYPE.  VP already stated the SERVICE_TYPE is outside the scope of this project and I don't see the value in CURR_STATUS currently. 
+
+```{r}
+# Select the most important columns
+claims <- claimsFull %>%
+  select(MRN_ALIAS, MEMBER_SEX,MEMBER_AGE,CLAIM_SEQ,EPISODE_SEQ,APPROVED_AMT,
+         APPROVED_DAYS,ED_DISCHARGE_DX_DESC,PREVENTABILITY,ED_NOT_NEEDED_PROP,
+         UNCLASSIFIED_ED, PCP_ID, VENDOR_PROV_ID, SERVICE_TYPE,CLAIM_TYPE,
+         PLACE_OF_SERVICE_DESC, TOB_CATEGORY,YEAR) %>%
+  arrange(MRN_ALIAS, CLAIM_SEQ, EPISODE_SEQ)
+
+# Get rid of full data set to save on memory.
+rm(claimsFull)
+
+# Glimspe at the structure of claims
+glimpse(claims)
+
+# View summary of columns, takes some time to run
+summary(claims)
+```
+
+###Relationship Between Variables
+
+I want to get a good understanding of the factor variable and the relationships between one another.  For instance FACILITY is the place, PROFESSIONAL is the person who saw you. ED will always be a FACILITY claim.
+Furthermore, if it’s in a facility, it will have TOB- hospital, outpatient surgery center (like a place that only does appendix removals without overnight check ins). You still have to have a professional claim associated with that visit. ED always has a facility claim. Urgent care is an outpatient professional. Does the data reflect this
+
+```{r}
+# Number of Patient Types(Inpatient, Outpatient or ED) by Claim Type(Facility or Professional)
+claims %>% select(SERVICE_TYPE, CLAIM_TYPE) %>%
+  table()
+
+# Type of Bill Category by Patient Type
+claims %>% select(TOB_CATEGORY,SERVICE_TYPE) %>%
+  table()
+```
+
+
+###Looking at Membership
+
+Virginia Premier has approximately `r claims %>%count(MRN_ALIAS) %>%nrow()` members that have had a claim in the past 6 years.  This is an important distinction as this data is a sub set of total VP members.  This data set covers 6 years worth of claims so many children may stop being members at 18 birthday and some older adults will become members at 65. 
+
+```{r}
+# Distribution of Member age
+claims %>% 
+  group_by(MRN_ALIAS, MEMBER_SEX) %>% 
+  summarize(Age = max(MEMBER_AGE)) %>% 
+  ggplot(aes(Age))+
+  geom_histogram(bins = 90)+
+  facet_wrap(~MEMBER_SEX)+
+  labs(x = "Member Age",y="Count", title="Age Distribution of Members")
+```
+
+I noticed '23C9A67453F9' only has one claim with an EPISODE_SEQ of 29,000.  This is clearly an outlier and should be remove from analysis.  It can be left in for exploration that does not relate to EPISODE_SEQ.
+
+
+The two columns of most importance are PREVENTABILITY and ED_NOT_NEEDED.  They share some commonality but for the purpose of this analysis should be consider separately.  ED visits for a diagnosis with PREVENTABILITY of 1 indicates ED visit is required but could have been prevented entirely through routine check ups with a PCP.  ED visits for a diagnosis with a ED_NOT_NEEDED of 1 indicates the condition was not life threatening and treatable at an Urgent Care facility.
+
+```{r}
+# Age distrbution of Preventable ED
+claims %>%
+  select(SERVICE_TYPE, PREVENTABILITY, MEMBER_AGE, MEMBER_SEX) %>%
+  filter(SERVICE_TYPE == 'ED' & (PREVENTABILITY == 1)) %>%
+  ggplot(aes(MEMBER_AGE)) +
+  geom_histogram(binwidth = 1)+
+  facet_wrap(~MEMBER_SEX)+
+  labs(title='Age Distribution of Preventable ER Visits', x = 'Age', y = NULL)
+
+# Age distrbution of ED_NOT_NEEDED visits
+claims %>%
+  select(SERVICE_TYPE,  ED_NOT_NEEDED_PROP, MEMBER_AGE, MEMBER_SEX) %>%
+  filter(SERVICE_TYPE == 'ED' & (ED_NOT_NEEDED_PROP == 1)) %>%
+  ggplot(aes(MEMBER_AGE)) +
+  geom_histogram(binwidth = 1)+
+  facet_wrap(~MEMBER_SEX)+
+  labs(title='Age Distribution of Unnecessary ER Visits', x = 'Age', y = NULL)
+```
+
+How often do members see their listed primary care physician(PCP).  Members who get routine check ups by someone other than their listed PCP will not be counted.
+
+```{r}
+# How many times have members seen there PCP
+claims %>% 
+  filter(PCP_ID == VENDOR_PROV_ID) %>% 
+  count(MRN_ALIAS, sort = TRUE) %>% 
+  head()
+
+# How many members is that
+claims %>% 
+  filter(PCP_ID == VENDOR_PROV_ID) %>% 
+  count(MRN_ALIAS, sort = TRUE) %>% 
+  nrow()
+```
+
+How many members have more than 100 claims?  The median claims is 40.
+
+```{r}
+# Number of memebers with more than 100 claims
+claims %>%  
+  group_by(MRN_ALIAS) %>% 
+  summarize(max_claim_seq = max(CLAIM_SEQ)) %>% 
+  ungroup %>% 
+  filter(max_claim_seq > 100) %>% 
+  nrow()
+```
+
+
+###Distribution of Diagnosis scores
+
+In addition to the explanation above.  A diagnosis can all have a UNCLASSIFIED_ED score with 1 indicating there is no PREVENTABLITY or ED_NOT_NEEDED score associated to that diagnosis.  This can also be a proportion.
+
+```{r}
+# Distribution of PREVENTIBLITY score
+claims %>% 
+  ggplot(aes(PREVENTABILITY))+
+  geom_histogram(bins = 10)
+# Distribution of ED_NOT_NEEDED score
+claims %>% 
+  ggplot(aes(ED_NOT_NEEDED_PROP))+
+  geom_histogram(bins = 10)
+# Distributino of UNCLASSIFIED_ED
+claims %>% 
+  ggplot(aes(UNCLASSIFIED_ED))+
+  geom_histogram(bins = 10)
+```
+
+###Past Visits to the ER
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+
+# This is hidden code used for below just the total number of preventable and ed_not_needed = 1
+prevent <- claims %>%
+  select(ED_DISCHARGE_DX_DESC,SERVICE_TYPE,PREVENTABILITY) %>%
+  filter(PREVENTABILITY == 1) %>%
+  group_by(ED_DISCHARGE_DX_DESC) %>%
+  summarize(PREVENTABILITY = mean(PREVENTABILITY)) %>% 
+  nrow()
+
+notneeded <- claims %>%
+  select(ED_DISCHARGE_DX_DESC,SERVICE_TYPE,ED_NOT_NEEDED_PROP) %>%
+  filter(ED_NOT_NEEDED_PROP == 1) %>%
+  group_by(ED_DISCHARGE_DX_DESC) %>%
+  summarize(ED_NOT_NEEDED_PROP = mean(ED_NOT_NEEDED_PROP)) %>% 
+  nrow()
+```
+
+
+So far we have been looking at all claims in the data set.  Now lets looks at only ED visits and see what diagnosis that are completely preventable or completely unnecessary.  Its important to note the total number of diagnoses with a PREVENTABILTY score of 1 is `r print(prevent)` and the number of diagnoses with a ED_NOT_NEEDED score of 1 is `r print(notneeded)`
+
+
+```{r}
+# Total amount of money spent on ER claims that were 100% preventable or 100% not er needed
+claims %>%
+  select(ED_DISCHARGE_DX_DESC,SERVICE_TYPE, PREVENTABILITY, ED_NOT_NEEDED_PROP, APPROVED_AMT, YEAR) %>%
+  filter(SERVICE_TYPE == 'ED' & (ED_NOT_NEEDED_PROP == 1 | PREVENTABILITY == 1)) %>%
+  group_by(YEAR) %>%
+  summarize(Total_Cost = sum(APPROVED_AMT)) %>%
+  ggplot(aes(YEAR, Total_Cost, fill = YEAR))+
+  geom_col()+
+  scale_y_continuous(labels = dollar_format())+
+  labs(title = 'Cost of Uneeded ER vistis', x = NULL, y = NULL)+
+  theme(legend.position="none")
+```
+
+What preventable diagnoses are most members going to the ED for?
+
+```{r}
+# Most comman preventably ER diagnosis
+claims %>%
+  select(ED_DISCHARGE_DX_DESC,SERVICE_TYPE, PREVENTABILITY,APPROVED_AMT, YEAR) %>%
+  filter(SERVICE_TYPE == 'ED' & (PREVENTABILITY == 1)) %>%
+  group_by(ED_DISCHARGE_DX_DESC) %>%
+  summarize(Total_Cases = n()) %>%
+  arrange(desc(Total_Cases)) %>%
+  head(n = 25) %>%
+  ggplot(aes(fct_reorder(ED_DISCHARGE_DX_DESC,Total_Cases),
+             Total_Cases,fill = fct_reorder(ED_DISCHARGE_DX_DESC,Total_Cases)))+
+  geom_col()+
+  coord_flip()+
+  labs(x = 'Diagnosis', title = 'Top Preventable Diagnoses')+
+  theme(legend.position="none")
+```
+
+What ed not needed diagnoses are most members going to the ED for?
+
+```{r}
+# Most comman unnecessary ER diagnosis
+claims %>%
+  select(ED_DISCHARGE_DX_DESC,SERVICE_TYPE, ED_NOT_NEEDED_PROP,APPROVED_AMT, YEAR) %>%
+  filter(SERVICE_TYPE == 'ED' & (ED_NOT_NEEDED_PROP == 1)) %>%
+  group_by(ED_DISCHARGE_DX_DESC) %>%
+  summarize(Total_Cases = n()) %>%
+  arrange(desc(Total_Cases)) %>%
+  head(n = 25) %>%
+  ggplot(aes(fct_reorder(ED_DISCHARGE_DX_DESC,Total_Cases),
+             Total_Cases,fill = fct_reorder(ED_DISCHARGE_DX_DESC,Total_Cases)))+
+  geom_col()+
+  coord_flip()+
+  labs(x = 'Diagnosis', title = 'Top Unnecessary ED Diagnoses')+
+  theme(legend.position="none")
+```
+
+Who are the habitual visitors of the ER when wether its completely preventable or unnecessary?
+
+```{r}
+# Most Unneeded or Preventable ER visitors
+claims %>%
+  select(ED_DISCHARGE_DX_DESC,SERVICE_TYPE, PREVENTABILITY, ED_NOT_NEEDED_PROP, APPROVED_AMT, YEAR, MRN_ALIAS) %>%
+  filter(SERVICE_TYPE == 'ED' & (ED_NOT_NEEDED_PROP == 1 | PREVENTABILITY == 1)) %>%
+  group_by(MRN_ALIAS) %>%
+  summarize(Total_Cases = n()) %>%
+  arrange(desc(Total_Cases)) %>%
+  head(n = 50) %>%
+  ggplot(aes(fct_reorder(MRN_ALIAS,Total_Cases), Total_Cases,fill = fct_reorder(MRN_ALIAS,Total_Cases)))+
+  geom_col()+
+  coord_flip()+
+  labs(x = 'Member', title = 'Top 50 Most Frequent Unneeded or Preventable ER Visitors')+
+  theme(legend.position="none")
+```
+
+Which members are costing the most money?
+
+```{r}
+# Most Costly ER visitors that are preventable or unnecessary
+claims %>%
+  select(ED_DISCHARGE_DX_DESC,SERVICE_TYPE, PREVENTABILITY, ED_NOT_NEEDED_PROP, APPROVED_AMT, YEAR, MRN_ALIAS) %>%
+  filter(SERVICE_TYPE == 'ED' & (ED_NOT_NEEDED_PROP == 1 | PREVENTABILITY == 1)) %>%
+  group_by(MRN_ALIAS) %>%
+  summarize(Total_Sum = sum(APPROVED_AMT)) %>%
+  arrange(desc(Total_Sum)) %>%
+  head(n = 50) %>%
+  ggplot(aes(fct_reorder(MRN_ALIAS,Total_Sum), Total_Sum,fill = fct_reorder(MRN_ALIAS,Total_Sum)))+
+  geom_col()+
+  coord_flip()+
+  labs(x = 'Member', title = 'Top 50 Most Clostly Members', subtitle = 'Money spent on uneeded or preventable ER visits')+
+  scale_y_continuous(labels = dollar_format())+
+  theme(legend.position="none")
+```
+
+Lets take a closer look at the #1 ED Lover (or ED hater depending on how you look at it).
+
+```{r}
+# 98D3D44BDEB2 has the most unneeded or prevnetable visits and the most costly
+claims %>%
+  filter(MRN_ALIAS == '98D3D44BDEB2',SERVICE_TYPE == 'ED' &
+        (ED_NOT_NEEDED_PROP == 1 | PREVENTABILITY == 1)) %>%
+  arrange(MRN_ALIAS, CLAIM_SEQ, EPISODE_SEQ) %>% 
+  select(MEMBER_AGE, MEMBER_SEX,CLAIM_SEQ,EPISODE_SEQ,ED_DISCHARGE_DX_DESC,PREVENTABILITY,
+         ED_NOT_NEEDED_PROP, UNCLASSIFIED_ED, SERVICE_TYPE)
+```
+
+
