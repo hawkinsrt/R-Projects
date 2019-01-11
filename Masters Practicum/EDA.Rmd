@@ -56,9 +56,9 @@ My first objective is to get familiar with the data and start trimming down the 
 # Select the most important columns
 claims <- claimsFull %>%
   select(MRN_ALIAS, MEMBER_SEX,MEMBER_AGE,CLAIM_SEQ,EPISODE_SEQ,APPROVED_AMT,
-         APPROVED_DAYS,ED_DISCHARGE_DX_DESC,PREVENTABILITY,ED_NOT_NEEDED_PROP,
-         UNCLASSIFIED_ED, PCP_ID, VENDOR_PROV_ID, SERVICE_TYPE,CLAIM_TYPE,
-         PLACE_OF_SERVICE_DESC, TOB_CATEGORY,YEAR) %>%
+APPROVED_DAYS,CODE_1, CODE_2,  ED_DISCHARGE_DX_DESC,PREVENTABILITY,ED_NOT_NEEDED_PROP,
+UNCLASSIFIED_ED, PCP_ID, VENDOR_PROV_ID, SERVICE_TYPE,CLAIM_TYPE,
+PLACE_OF_SERVICE_DESC, TOB_CATEGORY,YEAR) %>%
   arrange(MRN_ALIAS, CLAIM_SEQ, EPISODE_SEQ)
 
 # Get rid of full data set to save on memory.
@@ -70,6 +70,14 @@ glimpse(claims)
 # View summary of columns, takes some time to run
 summary(claims)
 ```
+
+
+###Looking at CODES and DIAGNOIS
+
+```{r}
+claims %>% select(ED_DISCHARGE_DX_DESC, CODE_1,CODE_2, ED_NOT_NEEDED_PROP, PREVENTABILITY) %>% group_by(ED_DISCHARGE_DX_DESC, CODE_1,CODE_2) %>% summarize(ED_NOT_NEEDED_PROP = mean(ED_NOT_NEEDED_PROP), PREVENTABILITY = mean(PREVENTABILITY)) %>% View()
+```
+
 
 ###Relationship Between Variables
 
