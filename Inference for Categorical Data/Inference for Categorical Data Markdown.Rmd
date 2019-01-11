@@ -1,0 +1,578 @@
+---
+title: "Inference for Categorical Data"
+date: "December 13, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE)
+```
+
+##Inference for a single parameter
+
+```{r}
+library(tidyverse)
+
+load('Data/gss.RData')
+```
+
+###Exploring consci
+
+The General Social Survey asks about far more topics than just happiness. Take a moment to poke around this data set and visualize the variables that interest you. When you're ready, turn your attention to the question of how much confidence people had in the scientific community in 2016. The answers to this question have been summarized as "High" or "Low" levels of confidence and are stored in the consci variable.
+
+```{r}
+# Subset data from 2016
+gss2016 <- gss %>%
+  filter(year == 2016, !is.na(consci))
+# Recode confidence to two factor
+gss2016$consci <-  recode(gss2016$consci, 'A GREAT DEAL' = 'High',
+                          'ONLY SOME' = 'Low',
+                          'HARDLY ANY' = 'Low')
+
+gss2016$partyid <- recode(gss2016$partyid,  "STRONG DEMOCRAT"  = 'D', 
+                          "NOT STR DEMOCRAT" = 'D',
+                          "IND,NEAR DEM"= 'I',
+                          "INDEPENDENT"='I',
+                          "IND,NEAR REP"='I',
+                          "NOT STR REPUBLICAN"='R',
+                          "STRONG REPUBLICAN"='R',
+                          "OTHER PARTY"='O')
+
+gss2016$happy <-  recode(gss2016$happy, 'VERY HAPPY' = 'HAPPY',
+                          'PRETTY HAPPY' = 'HAPPY',
+                          'NOT TOO HAPPY' = 'NOT HAPPY')
+
+
+# Plot distribution of consci
+ggplot(gss2016, aes(x = consci)) +
+  geom_bar()
+# Compute proportion of high conf
+p_hat <- gss2016 %>%
+  summarize(p = mean(consci == "High", na.rm = TRUE)) %>%
+  pull()
+```
+
+###Generating via bootstrap
+
+To assess your uncertainty in this estimate of the number of people that have "High" confidence in the scientific community, you need to calculate the standard error. Start by considering how different the data might look in just a single bootstrap sample.
+
+```{r}
+# Load the infer package
+library(infer)
+
+# Create single bootstrap data set
+b1 <- gss2016 %>%
+  specify(response = consci, success = "High") %>%
+  generate(reps = 1, type = "bootstrap")
+
+
+
+# Plot distribution of consci
+ggplot(b1, aes(x = consci)) +
+  geom_bar()
+
+# Compute proportion with high conf
+b1 %>%
+  summarize(p = mean(consci == "High")) %>%
+  pull()
+```
+
+###Constructing a CI
+
+You've seen one example of how p-hat can vary upon resampling, but we need to do this many many times to get a good estimate of its variability. Here you will compute a full bootstrap distribution to estimate the standard error that will be used to form a confidence interval.
+
+```{r}
+# Create bootstrap distribution for proportion that favor
+boot_dist <- gss2016 %>%
+  specify(response = consci, success = "High") %>%
+  generate(reps = 500, type = 'bootstrap') %>%
+  calculate(stat = "prop", success = "High", na.rm = TRUE)
+
+# Plot distribution
+ggplot(boot_dist, aes(stat)) +
+  geom_density()
+
+# Compute estimate of SE
+SE <- boot_dist %>%
+  summarize(se = sd(stat)) %>%
+  pull()
+
+# Create CI
+c(p_hat - 2 * SE, p_hat +2 *SE)
+```
+
+###SE with less data
+
+The less data that you have to make an estimate, the more uncertainty you will have in that estimate. This is reflected in the standard error.
+
+Two new smaller data sets have been created for you from gss2016: gss2016_small, which contains 50 observations, and gss2016_smaller which contains just 10 observations.
+
+```{r}
+# Create smaller data set
+gss2016_small <- gss2016[sample(nrow(gss2016), 50), ]
+gss2016_smaller <- gss2016[sample(nrow(gss2016), 10), ]
+
+# Create bootstrap distribution for proportion
+boot_dist_small <- gss2016_small %>%
+  specify(response = consci, success = "High") %>%
+  generate(reps = 500, type = "bootstrap") %>%
+  calculate(stat = "prop")
+
+# Compute estimate of SE
+SE_small_n <- boot_dist_small %>%
+  summarize(se = sd(stat)) %>%
+  pull()
+```
+
+
+###SE with different p
+
+Let's return now to our full size data set and see what happens to the standard error when we consider a category that has a different population proportion, p.
+
+```{r}
+# Create bootstrap distribution for proportion that have hardy any
+boot_dist <-gss2016 %>%
+  specify(response = consci,  success = "Low") %>%
+  generate(reps = 500, type = 'bootstrap') %>%
+  calculate(stat = "prop", na.rm = TRUE)
+
+# Compute estimate of SE
+SE_low_p <- boot_dist %>%
+    summarize(se = sd(stat)) %>%
+    pull()
+```
+
+###CI via Approximation
+
+The approximation shortcut offers an alternative method of computing the standard error. In this exercise, you will apply the approximation shortcut in a setting where the assumptions fail in order to investigate the consequences.
+
+The data set gss2016_small contains a random sample of 50 observations from gss2016 and has been created for you.
+
+```{r}
+# Compute p-hat and n
+p_hat <- gss2016_small %>%
+  summarize(p = mean(consci == "High", rm.na = TRUE)) %>%
+  pull()
+n <- 50
+
+# Check conditions
+n * p_hat >= 10
+n * (1 - p_hat) >= 10
+
+# Calculate SE
+SE_approx <- sqrt(p_hat*(1 - p_hat)/n)
+
+# Form 95% CI
+c(p_hat - 2 * SE_approx,p_hat + 2 * SE_approx)
+```
+
+##Proportions: testing and power
+
+###Life after death
+
+We're going to continue to use the data from the General Social Survey in this chapter. One of the questions that was asked of respondents was: "Do you believe there is a life after death?" Let's see how did your sample of Americans responded to this question in 2016.
+
+```{r}
+# Construct plot
+ggplot(gss2016, aes(x = postlife)) + 
+  geom_bar()
+# Compute and save proportion that believe
+p_hat <- gss2016 %>%
+  summarize(mean(postlife == "YES", na.rm = TRUE)) %>%
+  pull()
+```
+
+###Generating from H0
+
+Imagine that when reading the newspaper, you come across someone who makes the following claim: "3/4 of all Americans believe in life after death". This can be interpreted as a null hypothesis that the population proportion has a value of .75.
+
+Use this model as reality to generate a single data set to explore.
+
+```{r warning=FALSE}
+# Generate one data set under H0
+sim1 <- gss2016 %>%
+  specify(response = postlife, success = 'YES') %>%
+  hypothesize(null = 'point', p = .75) %>%
+  generate(reps = 1, type = 'simulate')
+
+# Construct plot
+ggplot(sim1, aes(postlife)) +
+  geom_bar()
+
+# Compute proportion that believe
+sim1 %>%
+    summarize(mean(postlife == 'YES')) %>%
+    pull()
+```
+
+###Testing a claim
+
+In the last exercise, you got a sense of what a single p-hat might be if in fact the true proportion of believers was .75. That p-hat was likely different from the p-hat in gss2016, but was that a fluke or is there a systematic inconsistency betwen that claim and the data in the GSS?
+
+```{r}
+# Generate null distribution
+null <- gss2016 %>%
+  specify(response = postlife, success = "YES") %>%
+  hypothesize(null = "point", p = .75) %>%
+  generate(reps = 100, type = "simulate") %>%
+  calculate(stat = 'prop')
+
+# Visualize null distribution
+ggplot(null, aes(x = stat)) +
+  geom_density() +
+  geom_vline(xintercept = p_hat, color = "red")
+
+# Compute the two-tailed p-value
+null %>%
+  summarize(mean(stat > p_hat)) %>%
+  pull() * 2
+```
+
+###Death Penalty and Sex
+
+In this exercise you'll return to the question of whether respondents favor or oppose the death penalty for people convicted of murder. Your objective here is to explore if opinions diverged between men and women in the gss2016 data.
+
+```{r}
+# Plot distribution
+ggplot(gss2016, aes(x = sex, fill = cappun)) +
+  geom_bar(position = 'fill')
+  
+# Compute two proportions
+p_hats <- gss2016 %>%
+  group_by(sex) %>%
+  summarize(mean(cappun == 'FAVOR', na.rm = TRUE)) %>%
+  pull()
+
+# Compute difference in proportions
+d_hat <- diff(p_hats)
+```
+
+###Hypothesis test on the difference in proportions
+
+Analyzing your sample, you learned that about 56% of women favor the death penalty while about 65% of men do - a difference of about 9%. That seems like a large difference, but what if it's just due to chance and in fact there is no relationship between sex and support for the death penalty? Find out by testing the null hypothesis that sex and support for the death penalty are independent of one another.
+
+```{r}
+# Create null distribution
+null <- gss2016 %>%
+  specify(cappun ~ sex, success = "FAVOR") %>%
+  hypothesize(null = "independence") %>%
+  generate(reps = 500, type = "permute") %>%
+  calculate(stat = "diff in props", order = c("FEMALE", "MALE"))
+  
+# Visualize null
+ggplot(null, aes(x = stat)) +
+  geom_density() +
+  geom_vline(xintercept = d_hat, col = "red")
+  
+# Compute two-tailed p-value
+null %>%
+  summarize(mean(stat < d_hat)) %>%
+  pull() * 2
+```
+
+###Hypothesis tests and confidence intervals
+
+As was mentioned at the very beginning of this chapter, there is a close link between hypothesis tests and confidence intervals. The former explores whether a particular hypothesis about the world is consistent with your data. The latter has no hypothesis, it simply quantifies your uncertainty in your point estimate by adding and subtracting the margin of error. In this exercises you will form a confidence interval around the difference in proportions, d-hat.
+
+```{r}
+# Create the bootstrap distribution
+boot <- gss2016 %>%
+  specify(cappun~sex ,success = 'FAVOR' ) %>%
+  generate(reps = 500 , type = 'bootstrap' ) %>%
+  calculate(stat = "diff in props", order = c("FEMALE", "MALE"))
+  
+# Compute the standard error
+SE <- boot %>%
+  summarize(sd(stat)) %>%
+  pull()
+  
+# Form the CI (lower, upper)
+c(d_hat - 2 * SE,d_hat + 2 * SE    )
+```
+
+
+##Comparing many parameters: independence
+
+###Politics and Space
+
+While the relationship between political party and military spending is no big surprise, what about the relationship between political party and another spending priority: space exploration? Start your exploration by simplifying the data set to include only people that identified as Republicans (R), Democrats (D), and Independents (I).
+
+```{r}
+# Exclude "other" party
+ gss_party<- gss2016 %>%
+  filter(partyid != "O") %>%
+  droplevels()
+
+# Bar plot of proportions
+gss_party %>%
+  ggplot(aes(x = partyid, fill = natspac)) +
+  geom_bar(position = "fill")
+  
+# Bar plot of counts
+gss_party %>%
+  ggplot(aes(x = partyid, fill = natspac)) +
+  geom_bar()
+```
+
+###From tidy to table to tidy
+
+The gss_party data set that you created is in a tidy format to facilitate visualization and analysis. In this exercise, you'll untidy the data to create a contingency table to display counts. Oftentimes, you'll be given data in a contingency table, so you'll also practice tidying it back up.
+
+```{r}
+library(broom)
+# Create table of natspac and party
+O <- gss_party %>%
+  select(natspac, partyid) %>%
+  table()
+
+# Convert table back to tidy df
+O %>%
+  tidy() %>%
+  uncount(n)
+```
+
+###A single permuted Chi-sq
+
+The key to generating data under a null hypothesis of independence is permutation. Generate just a single data set to see what sort of chi-squared statistic you might observe when in fact these two variables are independent of one another.
+
+```{r}
+# Create one permuted data set
+perm_1 <- gss_party %>%
+  specify(natarms ~ partyid) %>%
+  hypothesize(null = "independence") %>%
+  generate(reps = 1, type = "permute")
+  
+# Visualize permuted data
+ggplot(perm_1, aes(x = partyid, fill = natarms)) +
+  geom_bar()
+
+# Make contingency table
+tab <- perm_1 %>%
+  ungroup() %>%
+  select(partyid, natarms) %>%
+  table()
+  
+# Compute chi-squared stat
+chisq.test(tab)$statistic
+```
+
+###Building a null distribution
+
+To get a sense of the full distribution that the chi-squared test statistic can take under this hypothesis, you need to generate many more data sets. Do this first by adding onto your work from the previous exercise with the natspac variable, then conduct a second hypothesis test to see if party is independent of natarms. Once you have both null distributions, you can visualize them to see if they're consistent with your observed statistics.
+
+```{r}
+# Create null
+null <- gss_party %>%
+  specify(natspac ~ partyid) %>%
+  hypothesize(null = "independence") %>%
+  generate(reps = 100, type = "permute") %>%
+  calculate(stat = "Chisq")
+
+# Visualize H_0 and obs
+ggplot(null, aes(x = stat)) +
+  geom_density() 
+```
+
+###The geography of happiness
+
+In addition to information regarding their opinions on policy issues, GSS survey respondents also provided the region of the United States in which they live. With this in hand, you can explore the question: does this data set provide evidence of an association between happiness and geography?
+
+```{r}
+# create bar plot
+gss2016 %>%
+  ggplot(aes(x = region, fill = happy)) +
+  geom_bar(position = "fill") +
+  coord_flip()
+
+# create table
+tab <- gss2016 %>%
+  select(happy, region) %>%
+  table()
+  
+# compute observed statistic
+chi_obs_stat <- chisq.test(tab)$statistic
+```
+
+###A p-value two ways
+
+In this exercise you'll find out if the observed chi-squared statistic is unusually large under the following notion that,
+
+H0
+
+: Region is independent of Happy.
+
+The competing notion is the alternative hypothesis that there is an association between these variables. For the sake of comparison, you'll be finding the p-value first from the computation approach, then using the approximation.
+
+```{r}
+# generate null distribution
+null <- gss2016 %>%
+  specify(happy ~ region, success = "HAPPY") %>%
+  hypothesize(null = "independence") %>%
+  generate(reps = 100, type = "permute") %>%
+  calculate(stat = "Chisq")
+
+# plot null(s)
+ggplot(null, aes(x = stat)) +
+  geom_density() +
+  geom_vline(xintercept = chi_obs_stat) +
+  stat_function(fun = dchisq, args = list(df = 8), color = "blue")
+
+# permutation p-value
+null %>% 
+  summarize(mean(stat > chi_obs_stat)) %>% 
+  pull()
+
+# approximation p-value
+1 - pchisq(chi_obs_stat, df = 8)
+```
+
+##Comparing many parameters: goodness of fit
+
+###Who won?
+
+The iran data set contains all of the votes cast in this election, meaning that you can find the victor by computing the total number of votes for each candidate. In addition to answering the question of who won nationwide, you can also see how the results differed by province.
+
+Along the way, you'll use a very useful function called gather(). This allows you to reshape your dataframe by taking information stored in variable names and move it be data that lives in it's own column.
+
+```{r}
+iran <- read.csv('Data/iran.csv')
+
+# Compute candidate totals
+totals <- iran %>%
+  summarize(ahmadinejad = sum(ahmadinejad),
+            rezai = sum(rezai),
+            karrubi = sum(karrubi),
+            mousavi = sum(mousavi))
+
+# Plot totals
+totals %>%
+  gather(key = "candidate", value = "votes") %>%
+  ggplot(aes(x = candidate, y = votes)) +
+  geom_bar(stat = "identity")
+  
+# Cities won by #2
+iran %>%
+  group_by(province) %>%
+  summarize(mousavi = sum(mousavi),
+      ahmadinejad = sum(ahmadinejad)) %>%
+  mutate(mousavi_win = mousavi > ahmadinejad) %>%
+  filter(mousavi_win == TRUE)
+```
+
+###Extracting the first digit I
+
+To address the question of voter fraud, begin by creating a new column of data containing the first digit of the total number of votes cast. For this, you'll need a custom function which we've created for you called get_first(). The core of this function is substr(), which will take a string and extract a section of it called a substring.
+
+Once you create a new variable containing only the first digit, you can get a sense of how close it follows Benford's Law by constructing a bar chart.
+
+```{r}
+get_first <- function(x){
+  substr(as.character(x),1,1) %>% 
+    as.numeric() %>% 
+    as.factor()
+}
+
+# Create first_digit
+iran2 <- iran %>%
+  mutate(first_digit = get_first(total_votes_cast))
+  
+# Construct barchart
+ggplot(iran2, aes(first_digit))+
+  geom_bar()
+```
+
+```{r eval=FALSE, include=FALSE}
+
+library(benford.analysis)
+
+# Extract first digit of Total Votes
+digits <- extract.digits(iran$total_votes_cast, 1)
+iran$first_digit <- digits$data.digits
+
+# Calculate p_benford
+benford <- benford(iran$total_votes_cast, 1)
+get_benford <- getBfd(benford)
+p_benford <- get_benford$benford.dist
+
+# Tabulate the counts of each digit
+tab <- iran %>%
+  select(first_digit) %>%
+  table()
+
+# Compute observed stat
+sum(p_benford)
+chi_obs_stat <- chisq.test(tab, p = p_benford)$stat
+
+# Form null distribution
+# Cant figure out why this does not run
+null <- iran %>%
+  specify(response = first_digit) %>%
+  hypothesize(null = "point", p = p_benford) %>%
+  generate(reps = 500, type = "simulate") %>%
+  calculate(stat = "Chisq")
+
+
+```
+
+###Extracting the first digit II
+
+There are different levels at which we could consider looking at vote totals. We could look at precincts, or counties, or states, and each level might give us a slightly different picture of what's going on.
+
+For this analysis, let's look at totals at the county level in Iowa and focus on the votes for Trump and Clinton.
+
+```{r}
+iowa <- read_csv('Data/iowa-1.csv')
+
+# Get R+D county totals
+iowa2 <- iowa %>%
+  filter(candidate == "Hillary Clinton / Tim Kaine" | candidate == "Donald Trump / Mike Pence") %>%
+  group_by(county) %>%
+  summarize(dem_rep_votes = sum(votes, na.rm = TRUE)) 
+
+# Add first_digit
+iowa3 <- iowa2 %>%
+  mutate(first_digit = get_first(dem_rep_votes))
+
+# Construct bar plot
+ggplot(iowa3, aes(first_digit))+
+geom_bar()
+```
+
+
+###Testing Iowa
+
+You probably noticed that the bar chart of first digits is alarming: it looks quite different from what Benford's Law prescribes! Before you get ahead of yourself, though, realize that those bars each only contained a handful of counties, so you don't actually have that much data.
+
+This is a prime example of when a hypothesis test is handy. It can tell you if the structure that you see (in this case, the deviation from Benford's Law) could just be due to the random variability of your small sample, or if it's indicative of a systematic difference.
+
+```{r eval=FALSE, include=FALSE}
+# Calculate p_benford
+benford <- benford(iowa$votes, 1)
+get_benford <- getBfd(benford)
+p_benford <- get_benford$benford.dist
+
+# Extract first digit of Total Votes
+digits <- get_first(iowa$votes)
+iowa$first_digit <- digits
+
+# Tabulate the counts of each digit
+tab<- iowa3 %>%
+  select(first_digit) %>%
+  table()
+
+# Compute observed stat
+chi_obs_stat <- chisq.test(tab, p = p_benford)$stat
+
+# Form null distribution
+null <- iowa %>%
+  specify(response = first_digit) %>%
+  hypothesize(null = "point", p = p_benford) %>%
+  generate(reps = 500, type = "simulate") %>%
+  calculate(stat = "Chisq")
+  
+# Visualize null
+ggplot(null, aes(x = stat)) +
+  geom_density() +
+  geom_vline(xintercept = chi_obs_stat)
+```
+
