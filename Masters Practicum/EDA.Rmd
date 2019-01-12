@@ -72,15 +72,6 @@ summary(claims)
 ```
 
 
-###Looking at CODES and DIAGNOIS
-
-```{r}
-diag <-claims %>% select(ED_DISCHARGE_DX_DESC, CODE_1, ED_NOT_NEEDED_PROP, PREVENTABILITY) %>% group_by(ED_DISCHARGE_DX_DESC, CODE_1) %>% summarize(ED_NOT_NEEDED_PROP = mean(ED_NOT_NEEDED_PROP), PREVENTABILITY = mean(PREVENTABILITY))
-
-write.csv(diag, "diagnosis codes.csv")
-```
-
-
 ###Relationship Between Variables
 
 I want to get a good understanding of the factor variable and the relationships between one another.  For instance FACILITY is the place, PROFESSIONAL is the person who saw you. ED will always be a FACILITY claim.
