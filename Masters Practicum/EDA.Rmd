@@ -75,7 +75,9 @@ summary(claims)
 ###Looking at CODES and DIAGNOIS
 
 ```{r}
-claims %>% select(ED_DISCHARGE_DX_DESC, CODE_1,CODE_2, ED_NOT_NEEDED_PROP, PREVENTABILITY) %>% group_by(ED_DISCHARGE_DX_DESC, CODE_1,CODE_2) %>% summarize(ED_NOT_NEEDED_PROP = mean(ED_NOT_NEEDED_PROP), PREVENTABILITY = mean(PREVENTABILITY)) %>% View()
+diag <-claims %>% select(ED_DISCHARGE_DX_DESC, CODE_1, ED_NOT_NEEDED_PROP, PREVENTABILITY) %>% group_by(ED_DISCHARGE_DX_DESC, CODE_1) %>% summarize(ED_NOT_NEEDED_PROP = mean(ED_NOT_NEEDED_PROP), PREVENTABILITY = mean(PREVENTABILITY))
+
+write.csv(diag, "diagnosis codes.csv")
 ```
 
 
