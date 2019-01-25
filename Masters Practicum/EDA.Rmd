@@ -48,6 +48,17 @@ claimsFull %>%
   unlist()
 ```
 
+
+```{r}
+members <- claims %>% 
+  group_by(MRN_ALIAS, MEMBER_SEX) %>% 
+  summarize(Age = max(MEMBER_AGE),
+		   NumVisits = n(),
+		   MeanEDNN = mean(ED_NOT_NEEDED_PROP),
+		   MeanPrevent = mean(PREVENTABILITY),
+		   NumED = sum(SERVICE_TYPE == 'ED'))
+```
+
 ## Analysis First Steps
 
 My first objective is to get familiar with the data and start trimming down the variables to a more manageable amount. I am only going to focus on CODE_1 which is also captured in the more informative ED_DISCHARGE_DX_DESC so I will remove all 18 CODE_* columns.  Next I think I will just keep PLACE_OF_SERVIC_DESC and get rid of the numerical counterpart PLACE_OF_SERVICE.  PLACE_OF_SERVICE has 50 factor levels while PLACE_OF_SERVICE_DESC has 45 so its not a 1 to 1 relationship.  I think PLACE_OF_SERVICE_DESC will suffice for now.  I don't see any need for CURR_STATUS or REFFERAL_TYPE.  VP already stated the SERVICE_TYPE is outside the scope of this project and I don't see the value in CURR_STATUS currently. 
