@@ -59,34 +59,22 @@ summary(claims)
 ```{r}
 diag <-claims %>% 
   select(ED_DISCHARGE_DX_DESC, CODE_1, ED_NOT_NEEDED_PROP, PREVENTABILITY) %>% 
-  mutate(CODE_P = gsub("\\..*","",claims$CODE_1)) %>% 
-  group_by(ED_DISCHARGE_DX_DESC, CODE_1, CODE_P)%>%
+  mutate(CODE_P = gsub("\\..*","",claims$CODE_1),
+         CODE_FULL = gsub("[[:punct:]]","",claims$CODE_1)) %>% 
+  group_by(ED_DISCHARGE_DX_DESC, CODE_1, CODE_P, CODE_FULL)%>%
   summarize(ED_NOT_NEEDED_PROP = mean(ED_NOT_NEEDED_PROP), PREVENTABILITY = mean(PREVENTABILITY),
 n = n())
 
-write.csv(diag, "diagnosis codes.csv")
+write.csv(diag, "Data/diagnosis codes.csv")
 ```
 
 
 ```{r}
-claims$CODE_1 <- as.character(claims$CODE_1)
-str(diag)
 
-claims$CODE_P <- gsub("\\..*","",claims$CODE_1)
-
-d.group <-claims %>% select(ED_DISCHARGE_DX_DESC,CODE_P, ED_NOT_NEEDED_PROP, PREVENTABILITY) %>% 
-  group_by(CODE_P, ED_NOT_NEEDED_PROP, PREVENTABILITY) %>% 
-  summarize(n = n())
+cc <- read_csv("Data/cci_icd10cm_2019_1.csv", col_names = c('CODE','DESC','CHRONIC','BODYSYSTEM'))
 
 
-diag$CODE_1 <- as.character(diag$CODE_1)
-str(diag)
-
-daig$CODE_P <- gsub("\\..*","",diag$CODE_1)
-
-d.group.unique <-diag %>% select(CODE_P, ED_NOT_NEEDED_PROP, PREVENTABILITY) %>% 
-  group_by(CODE_P, ED_NOT_NEEDED_PROP, PREVENTABILITY) %>% 
-  summarize(n = n())
+summary(cc)
 
 ```
 
