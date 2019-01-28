@@ -85,3 +85,10 @@ AlchoholMisuse <- c(265.2,
 Asthma <- c(493,paste0('J',seq(45,45.999,by=0.001)))
 ```
 
+Read in ICD9 to ICD10 crosswalk.  The issue is there are many ICD10s to few ICD9s thus ICD9s can been be converted into serveral differnt ICD10 flavors.  Using Parent code and keeping ICD9s may be a better option.  Either way, its here to use.  Some lines are not a 1 to 1 and get discarded.
+
+```{r}
+cx <- read_delim("Cm9To10.txt", delim = "\t", col_names = FALSE)
+cx <- separate(cx, X1, c('ICD9','ICD10'), remove = TRUE)
+```
+
