@@ -249,14 +249,14 @@ What ed not needed diagnoses are most members going to the ED for?
 ```{r}
 # Most comman unnecessary ER diagnosis
 claims %>%
-  select(ED_DISCHARGE_DX_DESC,SERVICE_TYPE, ED_NOT_NEEDED_PROP,APPROVED_AMT, YEAR) %>%
+  select(CODE_1,SERVICE_TYPE, ED_NOT_NEEDED_PROP,APPROVED_AMT, YEAR) %>%
   filter(SERVICE_TYPE == 'ED' & (ED_NOT_NEEDED_PROP == 1)) %>%
-  group_by(ED_DISCHARGE_DX_DESC) %>%
+  group_by(CODE_1) %>%
   summarize(Total_Cases = n()) %>%
   arrange(desc(Total_Cases)) %>%
   head(n = 25) %>%
-  ggplot(aes(fct_reorder(ED_DISCHARGE_DX_DESC,Total_Cases),
-             Total_Cases,fill = fct_reorder(ED_DISCHARGE_DX_DESC,Total_Cases)))+
+  ggplot(aes(fct_reorder(CODE_1,Total_Cases),
+             Total_Cases,fill = fct_reorder(CODE_1,Total_Cases)))+
   geom_col()+
   coord_flip()+
   labs(x = 'Diagnosis', title = 'Top Unnecessary ED Diagnoses')+

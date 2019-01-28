@@ -7,6 +7,7 @@ output: html_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+
 ```
 
 
@@ -23,58 +24,48 @@ Read in the data
 claimsFull <- readRDS("Data/claimsCleanFull.RDS")
 ```
 
-##Factor Levels
-
-Check out the levels of all factor variables
-
-```{r}
-claimsFull %>%
-  select_if(is.factor) %>%
-  map(nlevels) %>%
-  unlist()
-```
-
-```{r}
-# Select the most important columns
-claims <- claimsFull %>%
-  select(MRN_ALIAS, MEMBER_SEX,MEMBER_AGE,CLAIM_SEQ,EPISODE_SEQ,APPROVED_AMT,
-APPROVED_DAYS,CODE_1, CODE_2,  ED_DISCHARGE_DX_DESC,PREVENTABILITY,ED_NOT_NEEDED_PROP,
-UNCLASSIFIED_ED, PCP_ID, VENDOR_PROV_ID, SERVICE_TYPE,CLAIM_TYPE,
-PLACE_OF_SERVICE_DESC, TOB_CATEGORY,YEAR) %>%
-  arrange(MRN_ALIAS, CLAIM_SEQ, EPISODE_SEQ)
-
-# Get rid of full data set to save on memory.
-rm(claimsFull)
-
-# Glimspe at the structure of claims
-glimpse(claims)
-
-# View summary of columns, takes some time to run
-summary(claims)
-```
-
-
 ###Looking at CODES and DIAGNOIS
 
 ```{r}
-diag <-claims %>% 
+diag <-claimsFull %>% 
   select(ED_DISCHARGE_DX_DESC, CODE_1, ED_NOT_NEEDED_PROP, PREVENTABILITY) %>% 
   mutate(CODE_P = gsub("\\..*","",claims$CODE_1),
          CODE_FULL = gsub("[[:punct:]]","",claims$CODE_1)) %>% 
   group_by(ED_DISCHARGE_DX_DESC, CODE_1, CODE_P, CODE_FULL)%>%
   summarize(ED_NOT_NEEDED_PROP = mean(ED_NOT_NEEDED_PROP), PREVENTABILITY = mean(PREVENTABILITY),
 n = n())
+```
+
+```{r}
+diag <-claimsFull %>% 
+  select(CODE_1) %>% 
+  mutate(CODE_FULL = gsub("[[:punct:]]","",claimsFull$CODE_1)) %>% 
+  group_by(CODE_FULL)%>%
+  summarize(n = n())
 
 write.csv(diag, "Data/diagnosis codes.csv")
 ```
 
-
 ```{r}
 
-cc <- read_csv("Data/cci_icd10cm_2019_1.csv", col_names = c('CODE','DESC','CHRONIC','BODYSYSTEM'))
+#Create Chronic Groups
+AlchoholMisuse <- c(265.2,
+                    seq(291.1,291.3, by = 0.1),
+                    seq(291.5,291.9, by=0.1),
+                    303.0, 303.9, 305.0, 357.5,425.5,535.3,
+                    seq(571.0,571.3, by = 0.1),
+                    seq(980,980.9,by = 0.1),
+                    'V11.3','E52',
+                    paste0('F',seq(10,10.9, by = 0.001)),
+                    'G62.1','I42.6','K29.2','K70.0','K70.3',
+                    'K70.9','T51','Z50.2','Z71.4','Z72.1'
+                    )
 
+Asthma <- c(493,paste0('J',seq(45,45.999,by=0.001)))
 
-summary(cc)
+diag <- diag %>%
+  mutate(AlcholholMisuse = ifelse(CODE_1 %in% AlchoholMisuse,1,0))
 
+glimpse(claims)
 ```
 
