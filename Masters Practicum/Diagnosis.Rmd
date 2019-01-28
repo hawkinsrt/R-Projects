@@ -7,13 +7,6 @@ output: html_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-
-```
-
-
-```{r message=FALSE, warning=FALSE}
-library(tidyverse)
-library(scales)
 ```
 
 ##Data Import
@@ -21,34 +14,49 @@ library(scales)
 Read in the data
 
 ```{r}
+library(tidyverse)
 claimsFull <- readRDS("Data/claimsCleanFull.RDS")
 ```
 
 ###Looking at CODES and DIAGNOIS
 
+After reading in the entire claims data, I wanted to create a dataset where each row is a unique diagnosis.
+
 ```{r}
 diag <-claimsFull %>% 
-  select(ED_DISCHARGE_DX_DESC, CODE_1, ED_NOT_NEEDED_PROP, PREVENTABILITY) %>% 
-  mutate(CODE_P = gsub("\\..*","",claims$CODE_1),
-         CODE_FULL = gsub("[[:punct:]]","",claims$CODE_1)) %>% 
+  select(ED_DISCHARGE_DX_DESC, CODE_1, ED_NOT_NEEDED_PROP, PREVENTABILITY,UNCLASSIFIED_ED) %>% 
+  mutate(CODE_P = gsub("\\..*","",claimsFull$CODE_1), #Get digits before decimal
+         CODE_FULL = gsub("[[:punct:]]","",claimsFull$CODE_1)) %>% #remove decimal but keep all digits
   group_by(ED_DISCHARGE_DX_DESC, CODE_1, CODE_P, CODE_FULL)%>%
-  summarize(ED_NOT_NEEDED_PROP = mean(ED_NOT_NEEDED_PROP), PREVENTABILITY = mean(PREVENTABILITY),
-n = n())
+  summarize(ED_NOT_NEEDED_PROP = mean(ED_NOT_NEEDED_PROP), PREVENTABILITY = mean(PREVENTABILITY), 
+UNCLASSIFIED_ED = mean(UNCLASSIFIED_ED),n = n())
 ```
 
-```{r}
-diag <-claimsFull %>% 
-  select(CODE_1) %>% 
-  mutate(CODE_FULL = gsub("[[:punct:]]","",claimsFull$CODE_1)) %>% 
-  group_by(CODE_FULL)%>%
-  summarize(n = n())
+To convert ICD-9 codes to ICD-10 I need to pull only ICD-9 codes.  Using StringR I can use regular expressions to create several character vectors then use those in a filter statment to get only ICD-9 codes.  The converstion software requires the decimal to be removed so I will use the CODE_FULL column and write to a txt file.
 
-write.csv(diag, "Data/diagnosis codes.csv")
+```{r}
+icd9 <- str_subset(diag$CODE_1, "\\d{3}\\.") #ICD-9 codes start with a number or a E or a V
+icd9e <- str_subset(diag$CODE_1, "[E]\\d{3}") #ICD-9 "E" codes have 3 digits before decimal
+icdv <- str_subset(diag$CODE_1, "[V]\\d{2}\\.") #Grab all codes that start with V
+icd10v <-str_subset(icd9v, "X") #ICD_10 "V" codes include "X"s
+
+icdOnly <- diag %>% 
+  filter((CODE_1 %in% icd9 | CODE_1 %in% icd9e | CODE_1 %in% icdv) & !(CODE_1 %in% icd10v))
+
+
 ```
 
-```{r}
+Here I create the txt file for conversion
 
-#Create Chronic Groups
+```{r}
+fileConn <- file("icd9codes.txt")
+writeLines(icdOnly$CODE_FULL, fileConn)
+close(fileConn)
+```
+
+
+```{r eval=FALSE, include=FALSE}
+#Create Groups Proof of Concept Curently set to not run
 AlchoholMisuse <- c(265.2,
                     seq(291.1,291.3, by = 0.1),
                     seq(291.5,291.9, by=0.1),
@@ -62,10 +70,5 @@ AlchoholMisuse <- c(265.2,
                     )
 
 Asthma <- c(493,paste0('J',seq(45,45.999,by=0.001)))
-
-diag <- diag %>%
-  mutate(AlcholholMisuse = ifelse(CODE_1 %in% AlchoholMisuse,1,0))
-
-glimpse(claims)
 ```
 
