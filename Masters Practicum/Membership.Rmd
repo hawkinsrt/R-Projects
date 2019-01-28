@@ -1,0 +1,26 @@
+---
+title: "Membership"
+author: "Ryan Hawkins"
+date: "January 13, 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+members <- claims %>% 
+  filter(MRN_ALIAS != '23C9A67453F9') # 
+  group_by(YEAR) %>% 
+  group_by(MRN_ALIAS, MEMBER_SEX) %>% 
+  summarize(CURRENT_AGE = max(MEMBER_AGE),
+            NO_CLAIMS = n(),
+            NO_VISITS = max(EPISODE_SEQ),
+            ED_CLAIMS = sum(SERVICE_TYPE == 'ED'),
+            PROP_ED = mean(SERVICE_TYPE == 'ED'),
+            ED_NN = sum(SERVICE_TYPE == 'ED' & ED_NOT_NEEDED_PROP >= .8),
+            PRO_ED_NN=mean(SERVICE_TYPE == 'ED' & ED_NOT_NEEDED_PROP >= .8))
+```
+

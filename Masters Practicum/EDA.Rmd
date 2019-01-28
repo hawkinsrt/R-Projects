@@ -48,6 +48,17 @@ claimsFull %>%
   unlist()
 ```
 
+
+```{r}
+members <- claims %>% 
+  group_by(MRN_ALIAS, MEMBER_SEX) %>% 
+  summarize(Age = max(MEMBER_AGE),
+		   NumVisits = n(),
+		   MeanEDNN = mean(ED_NOT_NEEDED_PROP),
+		   MeanPrevent = mean(PREVENTABILITY),
+		   NumED = sum(SERVICE_TYPE == 'ED'))
+```
+
 ## Analysis First Steps
 
 My first objective is to get familiar with the data and start trimming down the variables to a more manageable amount. I am only going to focus on CODE_1 which is also captured in the more informative ED_DISCHARGE_DX_DESC so I will remove all 18 CODE_* columns.  Next I think I will just keep PLACE_OF_SERVIC_DESC and get rid of the numerical counterpart PLACE_OF_SERVICE.  PLACE_OF_SERVICE has 50 factor levels while PLACE_OF_SERVICE_DESC has 45 so its not a 1 to 1 relationship.  I think PLACE_OF_SERVICE_DESC will suffice for now.  I don't see any need for CURR_STATUS or REFFERAL_TYPE.  VP already stated the SERVICE_TYPE is outside the scope of this project and I don't see the value in CURR_STATUS currently. 
@@ -56,9 +67,9 @@ My first objective is to get familiar with the data and start trimming down the 
 # Select the most important columns
 claims <- claimsFull %>%
   select(MRN_ALIAS, MEMBER_SEX,MEMBER_AGE,CLAIM_SEQ,EPISODE_SEQ,APPROVED_AMT,
-         APPROVED_DAYS,ED_DISCHARGE_DX_DESC,PREVENTABILITY,ED_NOT_NEEDED_PROP,
-         UNCLASSIFIED_ED, PCP_ID, VENDOR_PROV_ID, SERVICE_TYPE,CLAIM_TYPE,
-         PLACE_OF_SERVICE_DESC, TOB_CATEGORY,YEAR) %>%
+APPROVED_DAYS,CODE_1, CODE_2,  ED_DISCHARGE_DX_DESC,PREVENTABILITY,ED_NOT_NEEDED_PROP,
+UNCLASSIFIED_ED, PCP_ID, VENDOR_PROV_ID, SERVICE_TYPE,CLAIM_TYPE,
+PLACE_OF_SERVICE_DESC, TOB_CATEGORY,YEAR) %>%
   arrange(MRN_ALIAS, CLAIM_SEQ, EPISODE_SEQ)
 
 # Get rid of full data set to save on memory.
@@ -70,6 +81,7 @@ glimpse(claims)
 # View summary of columns, takes some time to run
 summary(claims)
 ```
+
 
 ###Relationship Between Variables
 
@@ -237,14 +249,14 @@ What ed not needed diagnoses are most members going to the ED for?
 ```{r}
 # Most comman unnecessary ER diagnosis
 claims %>%
-  select(ED_DISCHARGE_DX_DESC,SERVICE_TYPE, ED_NOT_NEEDED_PROP,APPROVED_AMT, YEAR) %>%
+  select(CODE_1,SERVICE_TYPE, ED_NOT_NEEDED_PROP,APPROVED_AMT, YEAR) %>%
   filter(SERVICE_TYPE == 'ED' & (ED_NOT_NEEDED_PROP == 1)) %>%
-  group_by(ED_DISCHARGE_DX_DESC) %>%
+  group_by(CODE_1) %>%
   summarize(Total_Cases = n()) %>%
   arrange(desc(Total_Cases)) %>%
   head(n = 25) %>%
-  ggplot(aes(fct_reorder(ED_DISCHARGE_DX_DESC,Total_Cases),
-             Total_Cases,fill = fct_reorder(ED_DISCHARGE_DX_DESC,Total_Cases)))+
+  ggplot(aes(fct_reorder(CODE_1,Total_Cases),
+             Total_Cases,fill = fct_reorder(CODE_1,Total_Cases)))+
   geom_col()+
   coord_flip()+
   labs(x = 'Diagnosis', title = 'Top Unnecessary ED Diagnoses')+
