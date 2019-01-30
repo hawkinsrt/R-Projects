@@ -20,53 +20,133 @@ claimsFull <- readRDS("Data/claimsCleanFull.RDS")
 
 ###Looking at CODES and DIAGNOIS
 
-After reading in the entire claims data, I wanted to create a dataset where each row is a unique diagnosis.
+After reading in the entire claims data, I wanted to create a dataset where each row is a unique diagnosis.  CODE_P is short for CODE_PARENT.  There is a issue right now with ICD9 and ICD10 both have Es and Vs.  I will have to find another way to create this column that takes that into consideration.  
 
 ```{r}
-diag <-claimsFull %>% 
-  select(ED_DISCHARGE_DX_DESC, CODE_1, ED_NOT_NEEDED_PROP, PREVENTABILITY,UNCLASSIFIED_ED) %>% 
-  mutate(CODE_P = gsub("\\..*","",claimsFull$CODE_1), #Get digits before decimal
-         CODE_FULL = gsub("[[:punct:]]","",claimsFull$CODE_1)) %>% #remove decimal but keep all digits
-  group_by(ED_DISCHARGE_DX_DESC, CODE_1, CODE_P, CODE_FULL)%>%
-  summarize(ED_NOT_NEEDED_PROP = mean(ED_NOT_NEEDED_PROP), PREVENTABILITY = mean(PREVENTABILITY), 
-UNCLASSIFIED_ED = mean(UNCLASSIFIED_ED),NumberOfClaims = n())
+diag <-claimsFull %>%
+  select(ED_DISCHARGE_DX_DESC, CODE_1, ED_NOT_NEEDED_PROP, PREVENTABILITY,UNCLASSIFIED_ED) %>%
+  mutate(CODE_FULL = str_remove_all(CODE_1, pattern = "[[:punct:]]")) %>% #remove decimal but keep all digits
+  group_by(ED_DISCHARGE_DX_DESC, CODE_1,CODE_FULL)%>%
+  summarize(ED_NOT_NEEDED_PROP = mean(ED_NOT_NEEDED_PROP, na.rm = TRUE), PREVENTABILITY = mean(PREVENTABILITY,na.rm = TRUE),
+UNCLASSIFIED_ED = mean(UNCLASSIFIED_ED,na.rm = TRUE),NumberOfClaims = n())
 
 rm(claimsFull)
 ```
 
-To convert ICD-9 codes to ICD-10 I need to pull only ICD-9 codes.  Using StringR I can use regular expressions to create several character vectors then use those in a filter statment to get only ICD-9 codes.  The converstion software requires the decimal to be removed so I will use the CODE_FULL column and write to a txt file.
+Now I want to see which parent codes have the most claims as well as the most codes within the group. To get the parent code I use regex to take everything before the decimal.  To further complicate matters, both ICD-9 and ICD-10 have 'V's with the same scheme before the decimal but ICD-10 has 'X's after the decimal.  They also both have 'E's but ICD-9 have 'E' followed by 3 digits where ICD-10 has 'E's followed by two digits. To distinguish between the two, I'm appending a '10-' before all ICD-10 V CODES.
+
+```{r}
+# Create vector of ICD-10 'V' codes
+icdv <- str_subset(diag$CODE_1, "[V]\\d{2}\\.") #Grab all codes that start with V
+icd10v <-str_subset(icdv, "X]") #ICD_10 "V" codes include "X"s
+
+```
+
+I went ahead and wrote the code to pull all ICD-9 codes in case we need them.
 
 ```{r}
 icd9 <- str_subset(diag$CODE_1, "\\d{3}\\.") #ICD-9 codes start with a number or a E or a V
 icd9e <- str_subset(diag$CODE_1, "[E]\\d{3}") #ICD-9 "E" codes have 3 digits before decimal
-icdv <- str_subset(diag$CODE_1, "[V]\\d{2}\\.") #Grab all codes that start with V
-icd10v <-str_subset(icdv, "X") #ICD_10 "V" codes include "X"s
 
-#remove rows where ED_DISCHARE_DX_DESC as this indicates a invalid code, usualy missing last digit.
-icd9Only <- diag %>% 
+icd9Only <- diag %>%
   filter((CODE_1 %in% icd9 | CODE_1 %in% icd9e | CODE_1 %in% icdv) & !(CODE_1 %in% icd10v) & !is.na(ED_NOT_NEEDED_PROP))
-
 ```
 
-Here I create the txt file for conversion
+Now I will append the '10-' to CODE_1, create CODE_P, and group by CODE_P.  
 
 ```{r}
-fileConn <- file("icd9codes.txt")
-writeLines(icd9Only$CODE_FULL, fileConn)
-close(fileConn)
+by_parent <- diag %>%
+  mutate(CODE = ifelse(CODE_1 %in% icd10v, str_c('10',as.character(CODE_1), sep='-'),as.character(CODE_1))) %>%
+  mutate(CODE_P = gsub("\\..*","",CODE)) %>%
+  group_by(CODE_P) %>%
+  summarize(DistinctCodes=n(), ED_NOT_NEEDED_PROP = mean(ED_NOT_NEEDED_PROP, na.rm = TRUE),
+            PREVENTABILITY = mean(PREVENTABILITY),
+            UNCLASSIFIED_ED = mean(UNCLASSIFIED_ED),TotalClaims = sum(NumberOfClaims))
 ```
 
+Diagnosis Code EDA
 
-Now that I have ICD-9 codes, I want to look at how many parent codes there are in our dataset.  I want to see the
+Read in the ICD-9 CCI and ICD-10 CCI(Chronic Condition Indicator)
 
 ```{r}
-diag %>% group_by(CODE_P) %>% 
-  summarize(DistinctCodes=n(), ED_NOT_NEEDED_PROP = mean(ED_NOT_NEEDED_PROP),
-            PREVENTABILITY = mean(PREVENTABILITY), 
-            UNCLASSIFIED_ED = mean(UNCLASSIFIED_ED),TotalClaims = sum(NumberOfClaims)) %>%
-  View()
+#Read in data
+cci9 <- read_csv('Data/cci_icd9cm_2015.csv')
+cci10 <- read_csv('Data/cci_icd10cm_2018_1.csv')
+#Remove puncuations
+cci9<- map_df(cci9,str_remove_all, pattern = "[[:punct:]]")
+cci10<- map_df(cci10,str_remove_all, pattern = "[[:punct:]]")
+
 ```
 
+So we don't have to keep looking up which number goes to which body system, I'm going to just make a small dataframe to join on
+
+```{r}
+id <- seq(1,18, by = 1)
+desc <- c('Infectious and parasitic disease',
+          'Neoplasms',
+          'Endocrine, nutritional, and metabolic diseases and immunity disorders',
+          'Diseases of blood and blood-forming organs',
+          'Mental disorders',
+          'Diseases of the nervous system and sense organs',
+          'Diseases of the circulatory system',
+          'Diseases of the respiratory system',
+          'Diseases of the digestive system',
+          'Diseases of the genitourinary system',
+          'Complications of pregnancy, childbirth, and the puerperium',
+          'Diseases of the skin and subcutaneous tissue',
+          'Diseases of the musculoskeletal system',
+          'Congenital anomalies',
+          'Certain conditions originating in the perinatal period',
+          'Symptoms, signs, and ill-defined conditions',
+          'Injury and poisoning',
+          'Factors influencing health status and contact with health services')
+
+body_system <- data.frame(id,desc)
+
+```
+
+
+```{r}
+
+#How many Chornic Conditions does each Body System have.
+table(cci9$CHRONIC_INDICATOR,cci9$BODY_SYSTEM)
+table(cci10$CHRONIC_INDICATOR, cci10$BODY_SYSTEM)
+
+#What Body System has the most codes
+cci9 %>% count(BODY_SYSTEM, sort = TRUE) %>%
+ggplot(aes(reorder(BODY_SYSTEM, n), n))+
+  geom_bar(stat = 'identity')+
+  labs(title = 'ICD-9 Codes by Body System', x = 'Body_System_ID', y = 'Number of Codes')
+
+cci10 %>% count(BODY_SYSTEM, sort = TRUE) %>%
+ggplot(aes(reorder(BODY_SYSTEM, n), n))+
+  geom_bar(stat = 'identity')+
+  labs(title = 'ICD-10 Codes by Body System', x = 'Body_System_ID', y = 'Number of Codes')
+
+```
+
+Injury and poisoning is by far the biggest umbrella.  It also seems like ICD-10 focused on adding more specifics to this category.  There are 6906 codes categorized as "None" for ICD-10.  This is due to using the same ICD-9 categorization for ICD-10 codes. These codes require more investigation.  We should not ignore them just yet even though it does not contain any chronic conditions.
+
+We've gone from ~37.5K specific diagnosis to ~2.7K parent diagnosis but still need to group the codes into smaller, more meaningful categories.  This will require internet research to find the codes that relate to chronic diagnosis like diabetes or asthma.
+
+```{r}
+#E08-E13 and 250 deals with diabetes
+diabetes9 <- str_subset(cci9$CODE, '^250')
+diabetes10 <- str_subset(cci10$CODE,'^[E](08|09|10|11|12|13)')
+
+diabetes <- c(diabetes9,diabetes10)
+rm(list = c('diabetes9','diabetes10'))
+diabetes
+
+d <-diag %>% filter(CODE_FULL %in% diabetes)
+sum(d$NumberOfClaims)
+```
+
+
+
+INGORE CODE PAST THIS POINT
+
+This section is based of the 30 chronic morbidity studies and my not be used. .
 
 ```{r eval=FALSE, include=FALSE}
 #Create Groups Proof of Concept Curently set to not run
@@ -85,10 +165,11 @@ AlchoholMisuse <- c(265.2,
 Asthma <- c(493,paste0('J',seq(45,45.999,by=0.001)))
 ```
 
-Read in ICD9 to ICD10 crosswalk.  The issue is there are many ICD10s to few ICD9s thus ICD9s can been be converted into serveral differnt ICD10 flavors.  Using Parent code and keeping ICD9s may be a better option.  Either way, its here to use.  Some lines are not a 1 to 1 and get discarded.
+Here I create the text file for conversion. This chunk can be ignored.
 
-```{r}
-cx <- read_delim("Cm9To10.txt", delim = "\t", col_names = FALSE)
-cx <- separate(cx, X1, c('ICD9','ICD10'), remove = TRUE)
+```{r eval=FALSE, include=FALSE}
+# Converstion software doesn't work so leaving this code in but doesn't run
+fileConn <- file("icd9codes.txt")
+writeLines(icd9Only$CODE_FULL, fileConn)
+close(fileConn)
 ```
-
