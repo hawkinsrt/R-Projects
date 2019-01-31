@@ -18,50 +18,98 @@ library(tidyverse)
 claimsFull <- readRDS("Data/claimsCleanFull.RDS")
 ```
 
-###Looking at CODES and DIAGNOIS
+###Look at all Unique Codes
 
-After reading in the entire claims data, I wanted to create a dataset where each row is a unique diagnosis.  CODE_P is short for CODE_PARENT.  There is a issue right now with ICD9 and ICD10 both have Es and Vs.  I will have to find another way to create this column that takes that into consideration.  
+I quickly want to some numbers and NA statisics for all 18 CODE varaibles. I keep the dataframe to join on to the Chornic Conditino Indicator crosswalk.  After finding the total number of unique diagnosis codes within the data I drop the character vector to coserve memeory.
+
+```{r}
+all_diag_df <- claimsFull %>% 
+  select(starts_with('CODE_'))
+
+library(naniar)
+miss_var_summary(all_diag_df, order = FALSE)
+
+
+all_diag <- c(t(all_diag_df))
+length(unique(all_diag))
+rm(all_diag)
+
+all_diag_df <- as.data.frame(table(all_diag))
+
+```
+
 
 ```{r}
 diag <-claimsFull %>%
-  select(ED_DISCHARGE_DX_DESC, CODE_1, ED_NOT_NEEDED_PROP, PREVENTABILITY,UNCLASSIFIED_ED) %>%
-  mutate(CODE_FULL = str_remove_all(CODE_1, pattern = "[[:punct:]]")) %>% #remove decimal but keep all digits
-  group_by(ED_DISCHARGE_DX_DESC, CODE_1,CODE_FULL)%>%
+  select(CODE_1, SERVICE_TYPE, ED_NOT_NEEDED_PROP, PREVENTABILITY,UNCLASSIFIED_ED, MEMBER_AGE, MEMBER_SEX) %>%
+  mutate(CODE_FULL = str_remove_all(CODE_1, pattern = "[[:punct:]]"),
+         IS_ED = (SERVICE_TYPE == 'ED'),
+         IS_OTPT = (SERVICE_TYPE == 'OTPT'),
+         IS_INPT = (SERVICE_TYPE == 'INPT'),
+         IS_F = (MEMBER_SEX == 'F')) %>% 
+  group_by(CODE_1,CODE_FULL)%>%
   summarize(ED_NOT_NEEDED_PROP = mean(ED_NOT_NEEDED_PROP, na.rm = TRUE), PREVENTABILITY = mean(PREVENTABILITY,na.rm = TRUE),
-UNCLASSIFIED_ED = mean(UNCLASSIFIED_ED,na.rm = TRUE),NumberOfClaims = n())
+UNCLASSIFIED_ED = mean(UNCLASSIFIED_ED,na.rm = TRUE),NumberOfClaims = n(),
+NumberOfED = sum(IS_ED),
+NumberOfOTPT = sum(IS_OTPT),
+NumberOfINPT = sum(IS_INPT),
+AverageAGE = mean(MEMBER_AGE, na.rm = TRUE),
+Pct_Female = mean(IS_F))
 
-rm(claimsFull)
+#rm(claimsFull)
 ```
 
-Now I want to see which parent codes have the most claims as well as the most codes within the group. To get the parent code I use regex to take everything before the decimal.  To further complicate matters, both ICD-9 and ICD-10 have 'V's with the same scheme before the decimal but ICD-10 has 'X's after the decimal.  They also both have 'E's but ICD-9 have 'E' followed by 3 digits where ICD-10 has 'E's followed by two digits. To distinguish between the two, I'm appending a '10-' before all ICD-10 V CODES.
+I have to do the same thing as above but to CODEs 2 - 5.  Because I don't want them associated with the ED_NN and PREVENTABILITY scores this dataset set needs to be made seperately then union the two and group by code.
 
 ```{r}
-# Create vector of ICD-10 'V' codes
-icdv <- str_subset(diag$CODE_1, "[V]\\d{2}\\.") #Grab all codes that start with V
-icd10v <-str_subset(icdv, "X]") #ICD_10 "V" codes include "X"s
+diag2 <- claimsFull %>% 
+  select(starts_with('CODE_'), -CODE_1, SERVICE_TYPE,MEMBER_AGE, MEMBER_SEX) %>% 
+  gather(starts_with('CODE_'), key = 'KEY', value = 'CODE_1') %>% 
+  filter(!is.na(CODE_1)) %>% 
+  select(-KEY) %>%   
+  mutate(CODE_FULL = str_remove_all(CODE_1, pattern = "[[:punct:]]"),
+         IS_ED = (SERVICE_TYPE == 'ED'),
+         IS_OTPT = (SERVICE_TYPE == 'OTPT'),
+         IS_INPT = (SERVICE_TYPE == 'INPT'),
+         IS_F = (MEMBER_SEX == 'F')) %>% 
+  group_by(CODE_1,CODE_FULL)%>%
+  summarize(NumberOfClaims = n(),
+NumberOfED = sum(IS_ED),
+NumberOfOTPT = sum(IS_OTPT),
+NumberOfINPT = sum(IS_INPT),
+AverageAGE = mean(MEMBER_AGE, na.rm = TRUE),
+Pct_Female = mean(IS_F))
 
+#Add the the score columns back as NA
+diag2$ED_NOT_NEEDED_PROP <- NA 
+diag2$PREVENTABILITY <- NA
+diag2$UNCLASSIFIED_ED <- NA
+
+#Rearrange columns to match diag
+diag2 <- diag2 %>% 
+  select(CODE_1,CODE_FULL,ED_NOT_NEEDED_PROP,PREVENTABILITY,UNCLASSIFIED_ED,everything())
+
+#Do the columns match up
+names(diag) == names(diag2)
 ```
 
-I went ahead and wrote the code to pull all ICD-9 codes in case we need them.
+Combine the two diag datasets together and create a 2 new cloumns that is NumberOfED * Scores
 
 ```{r}
-icd9 <- str_subset(diag$CODE_1, "\\d{3}\\.") #ICD-9 codes start with a number or a E or a V
-icd9e <- str_subset(diag$CODE_1, "[E]\\d{3}") #ICD-9 "E" codes have 3 digits before decimal
+diag_full <- diag %>% 
+  bind_rows(diag2) %>% 
+  group_by(CODE_1,CODE_FULL) %>% 
+  summarize(ED_NOT_NEEDED_PROP = mean(ED_NOT_NEEDED_PROP, na.rm = TRUE),
+            PREVENTABILITY = mean(PREVENTABILITY,na.rm = TRUE),
+            UNCLASSIFIED_ED = mean(UNCLASSIFIED_ED,na.rm = TRUE),
+            NumberOfClaims = sum(NumberOfClaims),
+            NumberOfED = sum(NumberOfED),
+            NumberOfOTPT = sum(NumberOfOTPT),
+            NumberOfINPT = sum(NumberOfINPT),
+            AverageAGE = round(mean(AverageAGE, na.rm = TRUE)),
+            Pct_Female = round(mean(Pct_Female),digits = 2))
 
-icd9Only <- diag %>%
-  filter((CODE_1 %in% icd9 | CODE_1 %in% icd9e | CODE_1 %in% icdv) & !(CODE_1 %in% icd10v) & !is.na(ED_NOT_NEEDED_PROP))
-```
-
-Now I will append the '10-' to CODE_1, create CODE_P, and group by CODE_P.  
-
-```{r}
-by_parent <- diag %>%
-  mutate(CODE = ifelse(CODE_1 %in% icd10v, str_c('10',as.character(CODE_1), sep='-'),as.character(CODE_1))) %>%
-  mutate(CODE_P = gsub("\\..*","",CODE)) %>%
-  group_by(CODE_P) %>%
-  summarize(DistinctCodes=n(), ED_NOT_NEEDED_PROP = mean(ED_NOT_NEEDED_PROP, na.rm = TRUE),
-            PREVENTABILITY = mean(PREVENTABILITY),
-            UNCLASSIFIED_ED = mean(UNCLASSIFIED_ED),TotalClaims = sum(NumberOfClaims))
+names(diag_full)[names(diag_full) == 'CODE_1'] <- 'CODE'
 ```
 
 Diagnosis Code EDA
@@ -76,13 +124,16 @@ cci10 <- read_csv('Data/cci_icd10cm_2018_1.csv')
 cci9<- map_df(cci9,str_remove_all, pattern = "[[:punct:]]")
 cci10<- map_df(cci10,str_remove_all, pattern = "[[:punct:]]")
 
+cci_both <-bind_rows(cci9,cci10)
+
 ```
+
 
 So we don't have to keep looking up which number goes to which body system, I'm going to just make a small dataframe to join on
 
 ```{r}
-id <- seq(1,18, by = 1)
-desc <- c('Infectious and parasitic disease',
+BODY_SYSTEM <- as.character(seq(1,18, by = 1))
+BODY_SYSTEM_DESC <- c('Infectious and parasitic disease',
           'Neoplasms',
           'Endocrine, nutritional, and metabolic diseases and immunity disorders',
           'Diseases of blood and blood-forming organs',
@@ -101,8 +152,33 @@ desc <- c('Infectious and parasitic disease',
           'Injury and poisoning',
           'Factors influencing health status and contact with health services')
 
-body_system <- data.frame(id,desc)
+body_system <- data.frame(BODY_SYSTEM,BODY_SYSTEM_DESC)
 
+```
+
+
+Now lets join CCI Data to our all_diag_df.
+
+```{r}
+#join diagnosis with cci and body system data
+code_final <- diag_full %>% 
+  left_join(cci_both, by = c('CODE_FULL' = 'CODE')) %>% 
+  left_join(body_system, by = 'BODY_SYSTEM') %>% 
+  mutate(NumberOfED_NN = ifelse(!is.na(ED_NOT_NEEDED_PROP), round(ED_NOT_NEEDED_PROP * NumberOfED), -1),
+         NumberOfED_PRV = ifelse(!is.na(PREVENTABILITY), round(PREVENTABILITY * NumberOfED), -1))
+
+#mutate_if won't work so have to change class the old fashion way
+code_final$CHRONIC_INDICATOR <- as.factor(code_final$CHRONIC_INDICATOR)
+code_final$BODY_SYSTEM <- as.factor(code_final$BODY_SYSTEM)
+code_final$CODE <- as.factor(code_final$CODE)
+code_final$CODE_FULL <- as.factor(code_final$CODE_FULL)
+code_final$CODE_DESCRIPTION <- as.factor(code_final$CODE_DESCRIPTION)
+
+#check to make sure everything is a number or factor
+glimpse(code_final)
+summary(code_final)
+
+#write.csv(code_final, 'Data/diagnosis_codes_metrics.csv')
 ```
 
 
@@ -136,20 +212,11 @@ diabetes10 <- str_subset(cci10$CODE,'^[E](08|09|10|11|12|13)')
 
 diabetes <- c(diabetes9,diabetes10)
 rm(list = c('diabetes9','diabetes10'))
-diabetes
+
 
 d <-diag %>% filter(CODE_FULL %in% diabetes)
 sum(d$NumberOfClaims)
-```
 
-
-
-INGORE CODE PAST THIS POINT
-
-This section is based of the 30 chronic morbidity studies and my not be used. .
-
-```{r eval=FALSE, include=FALSE}
-#Create Groups Proof of Concept Curently set to not run
 AlchoholMisuse <- c(265.2,
                     seq(291.1,291.3, by = 0.1),
                     seq(291.5,291.9, by=0.1),
@@ -165,11 +232,37 @@ AlchoholMisuse <- c(265.2,
 Asthma <- c(493,paste0('J',seq(45,45.999,by=0.001)))
 ```
 
-Here I create the text file for conversion. This chunk can be ignored.
+Now I want to see which parent codes have the most claims as well as the most codes within the group. To get the parent code I use regex to take everything before the decimal.  To further complicate matters, both ICD-9 and ICD-10 have 'V's with the same scheme before the decimal but ICD-10 has 'X's after the decimal.  They also both have 'E's but ICD-9 have 'E' followed by 3 digits where ICD-10 has 'E's followed by two digits. To distinguish between the two, I'm appending a '10-' before all ICD-10 V CODES.
 
-```{r eval=FALSE, include=FALSE}
-# Converstion software doesn't work so leaving this code in but doesn't run
-fileConn <- file("icd9codes.txt")
-writeLines(icd9Only$CODE_FULL, fileConn)
-close(fileConn)
+```{r}
+# Create vector of ICD-10 'V' codes
+icdv <- str_subset(diag$CODE_1, "[V]\\d{2}\\.") #Grab all codes that start with V
+icd10v <-str_subset(icdv, "X]") #ICD_10 "V" codes include "X"s
+
 ```
+
+I went ahead and wrote the code to pull all ICD-9 codes in case we need them.
+
+```{r}
+icd9 <- str_subset(diag$CODE_1, "\\d{3}\\.") #ICD-9 codes start with a number or a E or a V
+icd9e <- str_subset(diag$CODE_1, "[E]\\d{3}") #ICD-9 "E" codes have 3 digits before decimal
+
+icd9Only <- diag %>%
+  filter((CODE_1 %in% icd9 | CODE_1 %in% icd9e | CODE_1 %in% icdv) & !(CODE_1 %in% icd10v) & !is.na(ED_NOT_NEEDED_PROP))
+```
+
+Now I will append the '10-' to CODE_1, create CODE_P, and group by CODE_P.  
+
+```{r}
+by_parent <- diag %>%
+  mutate(CODE = ifelse(CODE_1 %in% icd10v, str_c('10',as.character(CODE_1), sep='-'),as.character(CODE_1))) %>%
+  mutate(CODE_P = gsub("\\..*","",CODE)) %>%
+  group_by(CODE_P) %>%
+  summarize(DistinctCodes=n(), ED_NOT_NEEDED_PROP = mean(ED_NOT_NEEDED_PROP, na.rm = TRUE),
+            PREVENTABILITY = mean(PREVENTABILITY),
+            UNCLASSIFIED_ED = mean(UNCLASSIFIED_ED),TotalClaims = sum(NumberOfClaims))
+```
+
+
+
+
