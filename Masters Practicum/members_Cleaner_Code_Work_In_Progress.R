@@ -1,6 +1,9 @@
 library(tidyverse)
 library(naniar)
 
+# Import and edit claims data -  Ryan's code
+claims <- read_rds("Data/claimsCleanSmall.RDS")
+
 all_diag_df <- claims %>% 
   select(starts_with('CODE_'))
 
@@ -28,13 +31,9 @@ diag$BODY_SYSTEM[is.na(diag$BODY_SYSTEM)] <- 0
 unique(diag$BODY_SYSTEM)
 #==============================================
 
-# Import and edit claims data -  Ryan's code
-claims <- read_rds("Data/claimsCleanSmall.RDS")
-
 claims<- claims %>% 
   filter(PLACE_OF_SERVICE_DESC != 'EMERGENCY ROOM - HOSPITAL'| is.na(PLACE_OF_SERVICE_DESC)) %>% 
-  unite(CLAIM_NUM, EPISODE_SEQ, col = ID, sep = '-') %>% 
-  select(ID, starts_with('CODE_'),YEAR) %>% 
+  select(CLAIM_NUM, starts_with('CODE_'),YEAR) %>% 
   filter(YEAR %in% c('2013','2014'))
 
 # gather all codes into one column so you only have to mutate once
@@ -55,10 +54,11 @@ rm(claims2)
 gc()
 
 claims4 <- claims3 %>% 
-  select(ID, number, BODY_SYSTEM) %>% 
+  select(CLAIM_NUM, number, BODY_SYSTEM) %>% 
   spread(number, BODY_SYSTEM)
 
 miss_var_summary(claims4)
+saveRDS(claims4, '2013and2014.rds')
 rm(claims3)
 rm(claims4)
 gc()

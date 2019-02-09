@@ -10,4 +10,7 @@ claims <- claimsFull %>%
          TOB_CATEGORY,APPROVED_DAYS, APPROVED_AMT, CLAIM_NUM) %>%
   arrange(MRN_ALIAS, CLAIM_SEQ, EPISODE_SEQ)
 
+claims <- claims[unique(claims$CLAIM_NUM), ] %>% 
+  arrange(MRN_ALIAS, CLAIM_SEQ, EPISODE_SEQ)
+
 saveRDS(claims,'Data/claimsCleanSmall.RDS')
