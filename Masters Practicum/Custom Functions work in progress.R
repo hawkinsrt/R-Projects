@@ -88,10 +88,15 @@ transform_codes <-function(df,method){
        select(CLAIM_NUM, number, CCS_CATEGORY) %>% 
        spread(number, CCS_CATEGORY)
      
-     file <- paste0('Data/',i,'of5','_ccs_category.rds')
-     saveRDS(claims4, file)
+     file <- paste0('Data/claim_ccs_category.csv')
+     
+     if(i==1){
+     write_csv(claims4, file, col_names = TRUE)
+     }else{
+       write_csv(claims4, file, append = TRUE)
+     }
      cat("=====================\n ")
-     cat(file, 'was save to the Data folder\n')
+     cat(file,i, 'was save to the Data folder\n')
      rm(claims3, claims4,  file)
      gc()
      
@@ -101,40 +106,21 @@ transform_codes <-function(df,method){
        select(CLAIM_NUM, number, BODY_SYSTEM) %>% 
        spread(number, BODY_SYSTEM)
      
-     file <- paste0('Data/',i,'of5','_body_system.rds')
-     saveRDS(claims4, file)
+     file <- 'Data/claim_body_system_full.csv'
+     
+     if(i==1){
+     write_csv(claims4, file, col_names = TRUE)
+   }else{
+     write_csv(claims4, file, append = TRUE)
+   }
      cat("=====================\n ")
-     cat(file, 'was save to the Data folder\n')
+     cat(file, i,'was save to the Data folder\n')
      rm(claims3, claims4,  file)
      gc
      
    }
-   else if(method == 'both'){
-     
-     claims4 <- claims3 %>% 
-       select(CLAIM_NUM, number, CCS_CATEGORY) %>% 
-       spread(number, CCS_CATEGORY)
-     
-     file <- paste0('Data/',i,'of5','_ccs_category.rds')
-     saveRDS(claims4, file)
-     cat("=====================\n ")
-     cat(file, 'was save to the Data folder\n')
-     rm(claims4, file)
-     
-     claims4 <- claims3 %>% 
-       select(CLAIM_NUM, number, BODY_SYSTEM) %>% 
-       spread(number, BODY_SYSTEM)
-     
-     file <- paste0('Data/',i,'of5','_body_system.rds')
-     saveRDS(claims4, file)
-     cat("=====================\n ")
-     cat(file, 'was save to the Data folder\n')
-     rm(claims4,  file)
-     gc()
-   }
   }
 }
-
 createClaimsSmall <- function(){
   claimsFull <- readRDS("Data/claimsCleanFull.RDS")
   # Select the most important columns
@@ -187,90 +173,9 @@ transform_claims <- function(df){
   df4<- df3 %>% 
     select(-MEMBER_AGE)
   
-  saveRDS(df4,'Data/claim_lead_age_group.rds')
+  write_csv(df4,'Data/claim_lead_age_group.csv', col_names = TRUE)
   remove(df,df2, df3,df4)
   
-}
-
-combine_data <- function(method){
-  
-  if(method == 'body_system'){
-    df1 <- readRDS('Data/1of5_body_system.rds')
-    df2 <- readRDS('Data/2of5_body_system.rds')
-    df3 <- readRDS('Data/3of5_body_system.rds')
-    df4 <- readRDS('Data/4of5_body_system.rds')
-    df5 <- readRDS('Data/5of5_body_system.rds')
-    
-    df6 <- bind_rows(df1,df2,df3,df4,df5)
-    
-    saveRDS(df6, 'Data/claim_body_system_full.RDS')
-    
-    rm(df1,df2,df3,df4,df5,df6)
-    file.remove('Data/1of5_body_system.rds')
-    file.remove('Data/2of5_body_system.rds')
-    file.remove('Data/3of5_body_system.rds')
-    file.remove('Data/4of5_body_system.rds')
-    file.remove('Data/5of5_body_system.rds')
-    }
-  else if(method == 'ccs'){
-    df1 <- readRDS('Data/1of5_ccs_category.rds')
-    df2 <- readRDS('Data/2of5_ccs_category.rds')
-    df3 <- readRDS('Data/3of5_ccs_category.rds')
-    df4 <- readRDS('Data/4of5_ccs_category.rds')
-    df5 <- readRDS('Data/5of5_ccs_category.rds')
-    
-    df6 <- bind_rows(df1,df2,df3,df4,df5)
-    
-    saveRDS(df6, 'Data/claim_css_category_full.RDS')
-    
-    rm(df1,df2,df3,df4,df5,df6)
-    file.remove('Data/1of5_ccs_category.rds')
-    file.remove('Data/2of5_ccs_category.rds')
-    file.remove('Data/3of5_ccs_category.rds')
-    file.remove('Data/4of5_ccs_category.rds')
-    file.remove('Data/5of5_ccs_category.rds')
-  }
-  else if(method == 'both'){
- 
-      df1 <- readRDS('Data/1of5_body_system.rds')
-      df2 <- readRDS('Data/2of5_body_system.rds')
-      df3 <- readRDS('Data/3of5_body_system.rds')
-      df4 <- readRDS('Data/4of5_body_system.rds')
-      df5 <- readRDS('Data/5of5_body_system.rds')
-      
-      df6 <- bind_rows(df1,df2,df3,df4,df5)
-      
-      saveRDS(df6, 'Data/claim_body_system_full.RDS')
-      
-
-      rm(df1,df2,df3,df4,df5,df6)
-      
-      file.remove('Data/1of5_body_system.rds')
-      file.remove('Data/2of5_body_system.rds')
-      file.remove('Data/3of5_body_system.rds')
-      file.remove('Data/4of5_body_system.rds')
-      file.remove('Data/5of5_body_system.rds')
-
-      df1 <- readRDS('Data/1of5_ccs_category.rds')
-      df2 <- readRDS('Data/2of5_ccs_category.rds')
-      df3 <- readRDS('Data/3of5_ccs_category.rds')
-      df4 <- readRDS('Data/4of5_ccs_category.rds')
-      df5 <- readRDS('Data/5of5_ccs_category.rds')
-      
-      df6 <- bind_rows(df1,df2,df3,df4,df5)
-      
-      saveRDS(df6, 'Data/claim_ccs_category_full.RDS')
-      
-      rm(df1,df2,df3,df4,df5,df6)
-      
-      file.remove('Data/1of5_ccs_category.rds')
-      file.remove('Data/2of5_ccs_category.rds')
-      file.remove('Data/3of5_ccs_category.rds')
-      file.remove('Data/4of5_ccs_category.rds')
-      file.remove('Data/5of5_ccs_category.rds')
-
-    
-  }
 }
 
 ## Writen by Michael Behrend
