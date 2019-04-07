@@ -154,9 +154,17 @@ transform_claims <- function(df){
     group_by(MRN_ALIAS) %>% 
     mutate(NEXT_SERVICE = lead(SERVICE_TYPE, n = 1),
            LEAD_EPISODE = lead(EPISODE_SEQ, n = 1),
+           NEXT_SERVICE2 = lead(SERVICE_TYPE, n = 2),
+           NEXT_SERVICE3 = lead(SERVICE_TYPE, n = 3),
            LEAD_YEAR = lead(YEAR, n = 1)) %>% 
     ungroup() %>% 
-    select(CLAIM_NUM,MRN_ALIAS, NEXT_SERVICE, MEMBER_AGE,  LEAD_EPISODE, LEAD_YEAR)
+    select(CLAIM_NUM,MRN_ALIAS, NEXT_SERVICE, NEXT_SERVICE2, NEXT_SERVICE3,
+           MEMBER_AGE,  LEAD_EPISODE, LEAD_YEAR) %>% 
+    filter(!is.na(NEXT_SERVICE3)) %>% 
+    mutate(ED_NEXT_3 = ifelse((NEXT_SERVICE == 'ED' | NEXT_SERVICE2 == 'ED' | 
+                                NEXT_SERVICE3 == 'ED'), 1, 0)) %>% 
+    select(-starts_with('NEXT_SERVICE'))
+  
   
   df3 <- df2 %>% 
     mutate(AGE_GROUP = case_when(

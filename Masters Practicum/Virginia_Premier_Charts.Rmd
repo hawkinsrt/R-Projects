@@ -1,0 +1,272 @@
+---
+title: "Virginia Premier Report"
+author: "Ryan Hawkins"
+date: "April 6, 2019"
+output: 
+  html_document:
+    theme: cosmo
+    highlight: monochrome
+    toc: true
+    toc_float: false
+    toc_depth: 4
+    code_folding: show
+    df_print: kable
+editor_options:
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#Executive Summary
+At the request of Medicaid/Medicare insurer Virginia Premier (VP), our Decision Analytics-Professional Track student team (DAPT team) developed a scoring model for prioritizing individual members with common chronic conditions for patient outreach. The ultimate goal of our task is to reduce overall Emergency Department (ED) usage by these members. In developing our model, we consulted recent industry studies and six years of VP data on ED and outpatient services provided to all of its members. We found that about 22.3% of VP members are diagnosed with one or more of the common chronic conditions identified by industry studies as contributing significantly to unnecessary ED usage. We recommend that VP's Care Coordination and analytic teams implement our Random Forest model immediately, to gain lessons learned to further refine and update the model. 
+
+```{r include=FALSE}
+library(tidyverse)
+library(scales)
+claims<- read_csv("Data/claims_ccs_as_code_with_lead_service.csv", 
+        col_types = cols(Asthma = col_number(), 
+        CLAIM_SEQ = col_number(), COPD = col_number(), 
+        Diabetes = col_number(), HeartFailure = col_number(), 
+        Hypertension = col_number(), MoodDisorder = col_number(), 
+        Psychoses = col_number()))
+
+small <- claims %>% 
+  select(MRN_ALIAS, CLAIM_NUM, MEMBER_SEX, AGE_GROUP, SERVICE_TYPE, Asthma, COPD,
+         Diabetes,HeartFailure,Hypertension, Psychoses, MoodDisorder, CLAIM_SEQ)
+
+pivot <- small %>% gather(Condition, value, Asthma, COPD, Diabetes, HeartFailure,
+                          Hypertension, Psychoses, MoodDisorder)
+
+rm(claims)
+
+members <- pivot  %>% 
+  group_by(MRN_ALIAS, Condition) %>% 
+  summarise(value = max(value)) %>%
+  spread(Condition, value) %>% 
+  ungroup() %>% 
+  replace(is.na(.), 0) %>%
+  mutate(Total = rowSums(.[2:8]))
+
+small <- small%>% 
+  mutate(Total = rowSums(.[5:11], na.rm = T))
+
+small %>% filter(SERVICE_TYPE == 'ED') %>% count(Total)
+
+```
+
+```{r}
+small %>% filter(SERVICE_TYPE == 'ED') %>% 
+  group_by(Total) %>% 
+  summarize(Total_Cases = n()) %>% 
+  ggplot(aes(factor(Total), Total_Cases, fill = (factor(Total))))+
+  geom_col()+
+  geom_text(aes(label= format(Total_Cases, big.mark = ','),vjust = -1))+
+  labs(x = 'Number of Conditions', y = 'Number of ED Visits',  #labels for tile and axis
+       title = 'Total ED Visits by Members by Number of Chronic Conditions',
+       subtitle = 'VP Claims between 2013 to 2018',
+       fill = 'Chronic Condition')+
+  theme(legend.position = 'none',
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.title = element_text(size = 12, face = 'bold'),
+        plot.title = element_text(hjust = 0.5, size = 10,face = 'bold'),
+        plot.subtitle = element_text(hjust = 0.5, size = 9,face = 'bold'))+
+  scale_x_discrete(breaks = c(0:7), labels = c(0:7))
+```
+
+
+```{r echo = FALSE}
+pivot %>% filter(!is.na(value) & SERVICE_TYPE == 'ED') %>% #Remove NAs and Only ED visits
+  group_by(Condition) %>% # Group by each Chronic Condition
+  summarize(Total_Cases = n()) %>% # Count how many cases for each Condition
+  ggplot(aes(fct_reorder(Condition,Total_Cases), Total_Cases, #Order by X axis
+             fill = Condition)) + # Colar by X axis
+  geom_col()+ # Bar chart
+  geom_text(aes(label= format(Total_Cases, big.mark = ','),vjust = 2))+ #Add labels to column
+  labs(x = 'Chronic Condition', y = 'Number of Visits',  #labels for tile and axis
+       title = 'Total ED Visits by Members with One or More Previously Diagnosed Common Chronic Condition',subtitle = 'VP Claims between 2013 to 2018',
+       fill = 'Chronic Condition')+
+  theme(legend.position = c(.1, .9), 
+        legend.justification = c(0, 1),
+        legend.text=element_text(size=10),
+        legend.title = element_text(size = 12),
+        legend.background = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.title = element_text(size = 12, face = 'bold'),
+        plot.title = element_text(hjust = 0.5, size = 10,face = 'bold'),
+        plot.subtitle = element_text(hjust = 0.5, size = 9,face = 'bold'))
+```
+
+
+```{r}
+members %>% 
+  filter(Total > 0) %>% 
+  gather(key = Condition, value = value, -MRN_ALIAS, -Total) %>% 
+  ggplot(aes(Total, value,fill = factor(Condition)))+
+  geom_bar(stat = 'identity')+
+  labs(x = 'Number of Conditions', y = 'Number of Members',  #labels for tile and axis
+       title = 'Members with One or More Common Chronic Condition',
+       fill = 'Chronic Condition',subtitle = 'VP Claims between 2013 to 2018')+
+  theme(legend.position = c(.6, .9), 
+       legend.justification = c(0, 1),
+       legend.text=element_text(size=10),
+       legend.title = element_text(size = 12, face = 'bold'),
+       legend.background = element_blank(),
+       plot.title = element_text(hjust = 0.5, size = 12, face = 'bold'),
+       plot.subtitle = element_text(hjust = 0.5, size = 10,face = 'bold'),
+       axis.text = element_text(size = 12),
+       axis.title = element_text(size = 12, face = 'bold'),
+       panel.grid.major.x = element_blank())+
+  scale_y_continuous(breaks = seq(10000,60000,10000),labels = comma)+
+  scale_x_continuous(breaks = c(1:7), labels = c(1:7))
+
+```
+
+
+```{r}
+member
+
+```
+
+
+
+
+
+
+#Not Used
+
+```{r echo = FALSE}
+pivot %>% filter(!is.na(value)) %>% 
+  group_by(MRN_ALIAS, Condition) %>% 
+  summarise(value = max(value)) %>%
+  group_by(Condition) %>% 
+  summarise(Total = n()) %>% 
+  ggplot(aes(fct_reorder(Condition, Total), Total,
+             fill = fct_reorder(Condition, Total)))+
+  geom_col()+
+  geom_text(aes(label= format(Total,big.mark = ',')), vjust = 2, size = 5)+ #Add labels to column
+  labs(x = 'Chronic Condition', y = 'Number of Members',  #labels for tile and axis
+       title = 'Members with a Prevously Diagnosed Common Chronic Condition',
+       fill = 'Chronic Condition')+
+  theme_void()+
+  theme(legend.position = c(.1, .8), 
+       legend.justification = c(0, 1),
+       legend.text=element_text(size=12),
+       legend.title = element_text(size = 14),
+       plot.title = element_text(hjust = 0.5, size = 16))
+
+```
+
+
+```{r echo=FALSE}
+pivot %>% filter(!is.na(value)) %>% #Remove NAs
+  group_by(Condition) %>% # Group by each Chronic Condition
+  summarize(Total_Cases = n()) %>% # Count how many cases for each Condition
+  ggplot(aes(fct_reorder(Condition,Total_Cases), Total_Cases, #Order by X axis
+         fill = fct_reorder(Condition, Total_Cases))) + # Colar by X axis
+  geom_col()+ # Bar chart
+  geom_text(aes(label= paste0(round(Total_Cases/1000000), ' M')),vjust = 2)+ #Add labels to column
+  labs(x = 'Chronic Condition', y = 'Total Visits',  #labels for tile and axis
+       title = 'Total Visits with a Prevously Diagnosed Common Chronic Condition (Millions)',
+       fill = 'Chronic Condition') +
+  theme_void()+
+  theme(legend.position = c(.05, .9), 
+        legend.justification = c(0, 1),
+        legend.text=element_text(size=12),
+        legend.title = element_text(size = 14),
+        plot.title = element_text(hjust = 0.5, size = 12))
+
+```
+
+
+```{r echo = FALSE}
+pivot %>% filter(!is.na(value)) %>% 
+  group_by(MRN_ALIAS, Condition) %>% 
+  summarise(value = max(value)) %>%
+  group_by(Condition) %>% 
+  summarise(Total = n()) %>% 
+  ggplot(aes(fct_reorder(Condition, Total), Total,
+             fill = fct_reorder(Condition, Total)))+
+  geom_col()+
+  geom_text(aes(label= format(Total,big.mark = ',')), vjust = 2, size = 5)+ #Add labels to column
+  labs(x = 'Chronic Condition', y = 'Number of Members',  #labels for tile and axis
+       title = 'Members with a Prevously Diagnosed Common Chronic Condition',
+       fill = 'Chronic Condition')+
+  theme_void()+
+  theme(legend.position = c(.1, .8), 
+       legend.justification = c(0, 1),
+       legend.text=element_text(size=12),
+       legend.title = element_text(size = 14),
+       plot.title = element_text(hjust = 0.5, size = 16))
+
+```
+
+```{r}
+members %>% filter(Total == 7)
+```
+
+```{r, echo = FALSE}
+
+members <- pivot  %>% 
+  group_by(MRN_ALIAS, Condition) %>% 
+  summarise(value = max(value)) %>%
+  spread(Condition, value) %>% 
+  ungroup() %>% 
+  replace(is.na(.), 0) %>%
+  mutate(Total = rowSums(.[2:8]))
+
+```
+
+```{r}
+members %>% 
+  count(Total)
+```
+
+```{r}
+members %>% 
+  filter(Asthma == 1) %>% 
+  select(-Asthma, -Total) %>% 
+  gather(key = Condition, value = value, -MRN_ALIAS) %>% 
+  group_by(Condition) %>% 
+  summarise(Total = sum(value)) %>% 
+  ggplot(aes(fct_reorder(Condition, Total), Total,
+             fill = fct_reorder(Condition, Total)))+
+  geom_col()+
+  geom_text(aes(label= format(Total,big.mark = ',')), vjust = 2, size = 5)+
+  labs(x = 'Chronic Condition', y = 'Number of Members',  #labels for tile and axis
+       title = 'Memebers with Asthma Comorbidites',
+       fill = 'Chronic Condition')+
+  theme_void()+
+  theme(legend.position = c(.1, .8), 
+       legend.justification = c(0, 1),
+       legend.text=element_text(size=12),
+       legend.title = element_text(size = 14),
+       plot.title = element_text(hjust = 0.5, size = 16))
+
+```
+
+```{r}
+members %>% 
+  filter(Hypertension == 1) %>% 
+  select(-Hypertension, -Total) %>% 
+  gather(key = Condition, value = value, -MRN_ALIAS) %>% 
+  group_by(Condition) %>% 
+  summarise(Total = sum(value)) %>% 
+  ggplot(aes(fct_reorder(Condition, Total), Total,
+             fill = fct_reorder(Condition, Total)))+
+  geom_col()+
+  geom_text(aes(label= format(Total,big.mark = ',')), vjust = 2, size = 5)+
+  labs(x = 'Chronic Condition', y = 'Number of Members',  #labels for tile and axis
+       title = 'Memebers with Hypertension Comorbidites',
+       fill = 'Chronic Condition')+
+  theme_void()+
+  theme(legend.position = c(.1, .8), 
+       legend.justification = c(0, 1),
+       legend.text=element_text(size=12),
+       legend.title = element_text(size = 14),
+       plot.title = element_text(hjust = 0.5, size = 16))
+```
+
