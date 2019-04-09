@@ -25,8 +25,7 @@ rm(all_diag,icd9Only,icdv, icd10v,icd9, icd9e)
 cat("Preprocessing Complete")
 
 # import diagnosis_final
-suppressMessages(suppressWarnings(diag <-read_csv('Data/diagnosis_final.csv')))
-diag$BODY_SYSTEM[is.na(diag$BODY_SYSTEM)] <- 0
+suppressMessages(suppressWarnings(diag <-read_csv('Data/ccs_diag_xwalk.csv')))
 
 diag <- diag %>% 
   mutate(TARGET_CONDITION = case_when(
@@ -105,7 +104,7 @@ for (i in 1:5){
     rm(claims4,claims5)
     gc()
       
-    # loop through body system columns and set to 1 if its before claims YEAR
+    # loop set to 1 if its before claims YEAR
      for(j in 2:8){
         claims6[,j] <- ifelse(claims6[,j] <= claims6$YEAR, 1, NA)
       }

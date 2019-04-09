@@ -23,7 +23,7 @@ clean <- function (claims){
   
 }
 
-transform_codes <-function(df,method){
+transform_codes <-function(df){
   
   all_diag_df <- df %>% 
     select(starts_with('CODE_'))
@@ -47,9 +47,9 @@ transform_codes <-function(df,method){
   rm(all_diag,icd9Only,icdv, icd10v,icd9, icd9e)
   cat("Preprocessing Complete")
   
-  # import diagnosis_final
-  suppressMessages(suppressWarnings(diag <-read_csv('Data/diagnosis_final.csv')))
-  diag$BODY_SYSTEM[is.na(diag$BODY_SYSTEM)] <- 0
+  # import crosswalk
+  suppressMessages(suppressWarnings(diag <-read_csv('Data/ccs_diag_xwalk.csv')))
+
   
   for (i in 1:5){
   
@@ -83,7 +83,7 @@ transform_codes <-function(df,method){
   gc()
   
   
-   if(method == 'ccs'){
+   
      claims4 <- claims3 %>% 
        select(CLAIM_NUM, number, CCS_CATEGORY) %>% 
        spread(number, CCS_CATEGORY)
@@ -100,25 +100,7 @@ transform_codes <-function(df,method){
      rm(claims3, claims4,  file)
      gc()
      
-   }
-   else if(method == 'body_system'){
-     claims4 <- claims3 %>% 
-       select(CLAIM_NUM, number, BODY_SYSTEM) %>% 
-       spread(number, BODY_SYSTEM)
-     
-     file <- 'Data/claim_body_system_full.csv'
-     
-     if(i==1){
-     write_csv(claims4, file, col_names = TRUE)
-   }else{
-     write_csv(claims4, file, append = TRUE)
-   }
-     cat("=====================\n ")
-     cat(file, i,'was save to the Data folder\n')
-     rm(claims3, claims4,  file)
-     gc
-     
-   }
+
   }
 }
 createClaimsSmall <- function(){
@@ -153,13 +135,11 @@ transform_claims <- function(df){
   df2 <- df %>% 
     group_by(MRN_ALIAS) %>% 
     mutate(NEXT_SERVICE = lead(SERVICE_TYPE, n = 1),
-           LEAD_EPISODE = lead(EPISODE_SEQ, n = 1),
            NEXT_SERVICE2 = lead(SERVICE_TYPE, n = 2),
-           NEXT_SERVICE3 = lead(SERVICE_TYPE, n = 3),
-           LEAD_YEAR = lead(YEAR, n = 1)) %>% 
+           NEXT_SERVICE3 = lead(SERVICE_TYPE, n = 3)) %>% 
     ungroup() %>% 
     select(CLAIM_NUM,MRN_ALIAS, NEXT_SERVICE, NEXT_SERVICE2, NEXT_SERVICE3,
-           MEMBER_AGE,  LEAD_EPISODE, LEAD_YEAR) %>% 
+           MEMBER_AGE) %>% 
     filter(!is.na(NEXT_SERVICE3)) %>% 
     mutate(ED_NEXT_3 = ifelse((NEXT_SERVICE == 'ED' | NEXT_SERVICE2 == 'ED' | 
                                 NEXT_SERVICE3 == 'ED'), 1, 0)) %>% 

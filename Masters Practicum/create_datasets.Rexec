@@ -1,4 +1,4 @@
-setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
+#setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
 source('Custom Functions.R')
 print('Hello')
 print('Lets Import the tidyverse and create a ClaimsSmall.RDS')
@@ -7,12 +7,12 @@ print('Lets Import the tidyverse and create a ClaimsSmall.RDS')
 ImportLib(tidyverse)
 
 # remove OTPT claims associated with ED visits, and duplicate claim numbers. Creates claimsCleanSmall.RDS
-createClaimsSmall()
+#createClaimsSmall()
 
 # read in the new claimsCleanSmall
-df <- read_rds('Data/claimsCleanSmall.RDS')
-
-#df <- read_csv('Data/claimsCleanSmall.csv', n_max = 1000000)
+#df <- read_rds('Data/claimsCleanSmall.RDS')
+#write_csv(df, 'Data/claimsCleanSmall.csv')
+suppressWarnings(suppressMessages(df <- read_csv('Data/claimsCleanSmall.csv', n_max = 1000000)))
 
 # Create chronic condition dataset
 print('Assigning chronic conditions to members')

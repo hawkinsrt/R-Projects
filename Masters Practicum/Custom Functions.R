@@ -1,5 +1,6 @@
 clean <- function (claims){ 
-  
+  # this function was used to clear up original raw dataset
+  # will not be used if data is queried from database
   df<- claims %>% filter(!is.na(X11))
   df <- unite(df, X13, c(X12, X13))
   
@@ -23,11 +24,13 @@ clean <- function (claims){
   
 }
 
-transform_codes <-function(df,method){
-  
+icd9_vector <- function(df){
+  #create a icd9_vector to label diag codes as version 9 or version 10
+  #this might be redundant because ccs xwalk as the version number but I like to use
+  #version number to join on just to be safe
   all_diag_df <- df %>% 
-    select(starts_with('CODE_'))
-  
+  select(starts_with('CODE_'))
+
   all_diag <- c(t(all_diag_df))
   
   all_diag <- data.frame(table(all_diag))
@@ -45,11 +48,112 @@ transform_codes <-function(df,method){
   
   icd9vector <- icd9Only$all_diag
   rm(all_diag,icd9Only,icdv, icd10v,icd9, icd9e)
-  cat("Preprocessing Complete")
+  return(icd9vector)
+
+}
+chronic_condition <-function(df){
   
+  icd9vector <- icd9_vector(df)
   # import diagnosis_final
-  suppressMessages(suppressWarnings(diag <-read_csv('Data/diagnosis_final.csv')))
-  diag$BODY_SYSTEM[is.na(diag$BODY_SYSTEM)] <- 0
+  suppressMessages(suppressWarnings(diag <-read_csv('Data/ccs_diag_xwalk.csv')))
+  
+  diag <- diag %>% 
+    mutate(TARGET_CONDITION = case_when(
+      str_detect(DIAG_CODE, '^F3|^296') ~ 'MoodDisorder',
+      str_detect(DIAG_CODE, '^F2|^295') ~ 'Psychoses',
+      str_detect(DIAG_CODE, '^J45|^493') ~ 'Asthma',
+      str_detect(DIAG_CODE, '^416|^49[012456]|^50[0-5]|^5064|^508[18]|^I27[89]|^J4[0-4]|^J4[67]|^J6[0-7]|^J684|^J70[13]') ~ 'COPD',
+      str_detect(DIAG_CODE, '^250|^E1[013]') ~ 'Diabetes',
+      str_detect(DIAG_CODE, '^428|^I50') ~ 'HeartFailure',
+      str_detect(DIAG_CODE, '^40[1-5]|^I1[0-5]') ~ 'Hypertension'
+    )) 
+  
+  
+  for (i in 1:5){
+    #split dataset into 5 groups for memory purposes
+    member <- df %>% 
+      count(MRN_ALIAS) %>% 
+      select(-n) 
+    
+    member$group <- rep_len(1:5, length.out=nrow(member))
+    
+    claims <- df %>% 
+      select(MRN_ALIAS, starts_with('CODE_'),YEAR, CLAIM_NUM, CLAIM_SEQ) %>% 
+      left_join(member, by = 'MRN_ALIAS') %>% 
+      filter(group == i)
+    
+    
+    # gather all codes into one column so you only have to mutate once
+    suppressWarnings(claims2 <- claims %>% 
+                       gather(number, DIAG_CODE, starts_with('CODE_')) %>% 
+                       mutate(ICD_VERSION = ifelse(DIAG_CODE %in% icd9vector, 9,10),
+                              DIAG_CODE = str_remove_all(DIAG_CODE, pattern = "[[:punct:]]")))
+    
+    
+    # group by diag code and icd version then join the diagnosis_final dataset to get cci and body system
+    claims3 <- claims2 %>% 
+      #group_by(DIAG_CODE, ICD_VERSION) %>% 
+      left_join(diag, by = c('DIAG_CODE' = 'DIAG_CODE', 'ICD_VERSION' = 'ICD_VERSION'))
+    
+    # free up some memory
+    rm(claims2)
+    gc()
+    
+    # Get only MRN_ALIAS that have a Chronic condition
+    claimsC <- claims3 %>% 
+      filter(!is.na(TARGET_CONDITION)) %>% 
+      count(MRN_ALIAS) %>% 
+      select(-n)
+    
+    claims3$YEAR <- as.numeric(as.character(claims3$YEAR))
+    
+    claims3 <-  claims3 %>% 
+      mutate(YEAR.CC = ifelse(!is.na(TARGET_CONDITION),YEAR, NA))
+    
+    suppressWarnings(claims4 <- claims3 %>% 
+                       filter(MRN_ALIAS %in% claimsC$MRN_ALIAS) %>% 
+                       select(MRN_ALIAS,TARGET_CONDITION, YEAR.CC) %>% 
+                       group_by(MRN_ALIAS,TARGET_CONDITION) %>% 
+                       summarise(YEAR.CC = min(YEAR.CC, na.rm = T)) %>% 
+                       spread(TARGET_CONDITION, YEAR.CC))
+    
+    rm(claims3)
+    
+    claims4[claims4 == 'Inf'] <- NA
+    
+    claims5 <- claims %>% select(MRN_ALIAS, CLAIM_NUM, CLAIM_SEQ, YEAR)
+    
+    rm(claims)
+    
+    claims6 <- claims4 %>% 
+      left_join(claims5, by = 'MRN_ALIAS') %>% 
+      select(-`<NA>`)
+    
+    claims6$YEAR <- as.numeric(as.character(claims6$YEAR))
+    
+    rm(claims4,claims5)
+    gc()
+    
+    # loop set to 1 if its before claims YEAR
+    for(j in 2:8){
+      claims6[,j] <- ifelse(claims6[,j] <= claims6$YEAR, 1, NA)
+    }
+    
+    file <- 'Data/claim_target_condition.csv'
+    if(i == 1){
+      write_csv(claims6, file, col_names = TRUE)
+    }else{
+      write_csv(claims6, file, append = T)  
+    }
+    cat(file, i, 'was save to the Data folder\n')
+    
+  } 
+  rm(claims6, claimsC, diag, member, file, i, icd9vector, j)
+}
+
+
+transform_codes <-function(df){
+  icd9vector <- icd9_vector(df)
   
   for (i in 1:5){
   
@@ -58,13 +162,11 @@ transform_codes <-function(df,method){
     select(-n) 
   
   mem$group <- rep_len(1:5, length.out=nrow(mem))
-
   
   claims<- df%>% 
     select(MRN_ALIAS, starts_with('CODE_'),YEAR, CLAIM_NUM, CLAIM_SEQ) %>% 
     left_join(mem, by = 'MRN_ALIAS') %>% 
     filter(group ==i)
-  
 
   # gather all codes into one column so you only have to mutate once
   suppressWarnings(claims2 <- claims %>% 
@@ -72,7 +174,7 @@ transform_codes <-function(df,method){
                      mutate(ICD_VERSION = ifelse(DIAG_CODE %in% icd9vector, 9,10),
                             DIAG_CODE = str_remove_all(DIAG_CODE, pattern = "[[:punct:]]")))
   
-
+  suppressMessages(suppressWarnings(diag <-read_csv('Data/ccs_diag_xwalk.csv')))
   # group by diag code and icd version then join the diagnosis_final dataset to get cci and body system
   claims3 <- claims2 %>% 
     #group_by(DIAG_CODE, ICD_VERSION) %>% 
@@ -81,9 +183,7 @@ transform_codes <-function(df,method){
   # free up some memory
   rm(claims2)
   gc()
-  
-  
-   if(method == 'ccs'){
+   
      claims4 <- claims3 %>% 
        select(CLAIM_NUM, number, CCS_CATEGORY) %>% 
        spread(number, CCS_CATEGORY)
@@ -95,31 +195,11 @@ transform_codes <-function(df,method){
      }else{
        write_csv(claims4, file, append = TRUE)
      }
-     cat("=====================\n ")
      cat(file,i, 'was save to the Data folder\n')
      rm(claims3, claims4,  file)
      gc()
-     
-   }
-   else if(method == 'body_system'){
-     claims4 <- claims3 %>% 
-       select(CLAIM_NUM, number, BODY_SYSTEM) %>% 
-       spread(number, BODY_SYSTEM)
-     
-     file <- 'Data/claim_body_system_full.csv'
-     
-     if(i==1){
-     write_csv(claims4, file, col_names = TRUE)
-   }else{
-     write_csv(claims4, file, append = TRUE)
-   }
-     cat("=====================\n ")
-     cat(file, i,'was save to the Data folder\n')
-     rm(claims3, claims4,  file)
-     gc
-     
-   }
   }
+  rm(icd9vector)
 }
 createClaimsSmall <- function(){
   claimsFull <- readRDS("Data/claimsCleanFull.RDS")
@@ -152,12 +232,18 @@ createClaimsSmall <- function(){
 transform_claims <- function(df){
   df2 <- df %>% 
     group_by(MRN_ALIAS) %>% 
-    mutate(NEXT_SERVICE = lead(SERVICE_TYPE, n = 1),
-           LEAD_EPISODE = lead(EPISODE_SEQ, n = 1),
-           LEAD_YEAR = lead(YEAR, n = 1)) %>% 
-    ungroup() %>% 
-    select(CLAIM_NUM,MRN_ALIAS, NEXT_SERVICE, MEMBER_AGE,  LEAD_EPISODE, LEAD_YEAR)
+    mutate(NEXT_SERVICE = lead(SERVICE_TYPE, n = 1), #1 visit into the future
+           NEXT_SERVICE2 = lead(SERVICE_TYPE, n = 2), #2 visits into the future
+           NEXT_SERVICE3 = lead(SERVICE_TYPE, n = 3)) %>% #3 visits into the future
+    ungroup() %>%  
+    select(CLAIM_NUM,MRN_ALIAS, NEXT_SERVICE, NEXT_SERVICE2, NEXT_SERVICE3,
+           MEMBER_AGE) %>% #select only imporatant columns
+    filter(!is.na(NEXT_SERVICE3)) %>% 
+    mutate(ED_NEXT_3 = ifelse((NEXT_SERVICE == 'ED' | NEXT_SERVICE2 == 'ED' | 
+                                NEXT_SERVICE3 == 'ED'), 1, 0)) %>% # if any of next 3 visit is ED then 1
+    select(-starts_with('NEXT_SERVICE'))
   
+  # create bins for age
   df3 <- df2 %>% 
     mutate(AGE_GROUP = case_when(
       MEMBER_AGE <= 2 ~ 'Baby',
@@ -171,10 +257,10 @@ transform_claims <- function(df){
       TRUE ~ 'Very Senior')) 
   
   df4<- df3 %>% 
-    select(-MEMBER_AGE)
+    select(-MEMBER_AGE) # remove MEMBER_AGE column
   
-  write_csv(df4,'Data/claim_lead_age_group.csv', col_names = TRUE)
-  remove(df,df2, df3,df4)
+  write_csv(df4,'Data/claim_lead_age_group.csv', col_names = TRUE) #save to Data folder
+  remove(df,df2, df3,df4) #clear up some memory
   
 }
 
