@@ -51,7 +51,7 @@ icd9_vector <- function(df){
   return(icd9vector)
 
 }
-chronic_condition <-function(df){
+chronic_condition <-function(df, splits = 5){
   
   icd9vector <- icd9_vector(df)
   # import diagnosis_final
@@ -77,13 +77,13 @@ chronic_condition <-function(df){
     )) 
   
   
-  for (i in 1:5){
+  for (i in 1:splits){
     #split dataset into 5 groups for memory purposes
     member <- df %>% 
       count(MRN_ALIAS) %>% 
       select(-n) 
     
-    member$group <- rep_len(1:5, length.out=nrow(member))
+    member$group <- rep_len(1:splits, length.out=nrow(member))
     
     claims <- df %>% 
       select(MRN_ALIAS, starts_with('CODE_'),YEAR, CLAIM_NUM, CLAIM_SEQ) %>% 
@@ -143,7 +143,7 @@ chronic_condition <-function(df){
     gc()
     
     # loop set to 1 if its before claims YEAR
-    for(j in 2:8){
+    for(j in 2:15){
       claims6[,j] <- ifelse(claims6[,j] <= claims6$YEAR, 1, NA)
     }
     
@@ -160,16 +160,16 @@ chronic_condition <-function(df){
 }
 
 
-transform_codes <-function(df){
+transform_codes <-function(df, splits=5){
   icd9vector <- icd9_vector(df)
   
-  for (i in 1:5){
+  for (i in 1:splits){
   
   mem <- df %>% 
     count(MRN_ALIAS) %>% 
     select(-n) 
   
-  mem$group <- rep_len(1:5, length.out=nrow(mem))
+  mem$group <- rep_len(1:splits, length.out=nrow(mem))
   
   claims<- df%>% 
     select(MRN_ALIAS, starts_with('CODE_'),YEAR, CLAIM_NUM, CLAIM_SEQ) %>% 
@@ -237,18 +237,20 @@ createClaimsSmall <- function(){
   rm(claims2,claims3)
 }
 
-transform_claims <- function(df){
+transform_claims <- function(df, save = TRUE){
+  df$YEAR <- as.numeric(df$YEAR)
+  
   df2 <- df %>% 
     group_by(MRN_ALIAS) %>% 
     mutate(NEXT_SERVICE = lead(SERVICE_TYPE, n = 1), #1 visit into the future
            NEXT_SERVICE2 = lead(SERVICE_TYPE, n = 2), #2 visits into the future
-           NEXT_SERVICE3 = lead(SERVICE_TYPE, n = 3)) %>% #3 visits into the future
+           NEXT_SERVICE3 = lead(SERVICE_TYPE, n = 3),
+           YEAR_NEXT_SERVICE3 = lead(YEAR, n=3)) %>% #3 visits into the future
     ungroup() %>%  
-    select(CLAIM_NUM,MRN_ALIAS, NEXT_SERVICE, NEXT_SERVICE2, NEXT_SERVICE3,
-           MEMBER_AGE) %>% #select only imporatant columns
-    filter(!is.na(NEXT_SERVICE3)) %>% 
+    select(CLAIM_NUM,MRN_ALIAS, NEXT_SERVICE, NEXT_SERVICE2, NEXT_SERVICE3,YEAR,
+           YEAR_NEXT_SERVICE3, MEMBER_AGE) %>% #select only imporatant columns
     mutate(ED_NEXT_3 = ifelse((NEXT_SERVICE == 'ED' | NEXT_SERVICE2 == 'ED' | 
-                                NEXT_SERVICE3 == 'ED'), 1, 0)) %>% # if any of next 3 visit is ED then 1
+                                NEXT_SERVICE3 == 'ED'), 1, 0)& YEAR >= YEAR_NEXT_SERVICE3 - 1) %>% # if any of next 3 visit is ED then 1
     select(-starts_with('NEXT_SERVICE'))
   
   # create bins for age
@@ -266,10 +268,12 @@ transform_claims <- function(df){
   
   df4<- df3 %>% 
     select(-MEMBER_AGE) # remove MEMBER_AGE column
-  
+  if(save == TRUE){
   write_csv(df4,'Data/claim_lead_age_group.csv', col_names = TRUE) #save to Data folder
   remove(df,df2, df3,df4) #clear up some memory
-  
+  }else{
+    return(df4)
+  }
 }
 
 ## Writen by Michael Behrend

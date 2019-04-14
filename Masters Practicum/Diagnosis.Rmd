@@ -11,60 +11,17 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ##Data Import
 
-Read in the data
-
 ```{r}
 library(tidyverse)
-claimsFull <- readRDS("Data/claimsCleanFull.RDS")
+source('Custom Functions.R')
 
-claimsFull <- claimsFull %>%
-  select(MRN_ALIAS, MEMBER_SEX,MEMBER_AGE,CLAIM_SEQ,EPISODE_SEQ,APPROVED_AMT,
-APPROVED_DAYS,starts_with("CODE_"),  ED_DISCHARGE_DX_DESC,PREVENTABILITY,ED_NOT_NEEDED_PROP,
-UNCLASSIFIED_ED, PCP_ID, VENDOR_PROV_ID, SERVICE_TYPE,CLAIM_TYPE,
-PLACE_OF_SERVICE_DESC, TOB_CATEGORY,YEAR) 
-```
+claims <- read_rds('Data/claimscleanSmall.RDS')
 
-###Look at all Unique Codes
+icd9vector <- icd9_vector(claims)
 
-I quickly want to some numbers and NA statisics for all 18 CODE varaibles. I keep the dataframe to join on to the Chornic Conditino Indicator crosswalk.  After finding the total number of unique diagnosis codes within the data I drop the character vector to coserve memeory.
-
-```{r}
-#this code gives you a dataframe of all 18 codes in two columns code and frequency
-all_diag_df <- claimsFull %>% 
-  select(starts_with('CODE_'))
-
-all_diag <- c(t(all_diag_df))
-
-all_diag <- data.frame(table(all_diag))
-rm(all_diag_df)
-
-```
-
-
-```{r}
-# Create vector of ICD-10 'V' codes
-icdv <- str_subset(all_diag$all_diag, "[V]\\d{2}\\.") #Grab all codes that start with V
-icd10v <-str_subset(icdv, "[X]") #ICD_10 "V" codes include "X"s
-
-```
-
-I went ahead and wrote the code to pull all ICD-9 codes in case we need them.
-
-```{r}
-icd9 <- str_subset(all_diag$all_diag, "^\\d") #ICD-9 codes start with a number or a E or a V
-icd9e <- str_subset(all_diag$all_diag, "[E]\\d{3}") #ICD-9 "E" codes have 3 digits before decimal
-
-icd9Only <- all_diag %>%
-  filter((all_diag %in% icd9 | all_diag %in% icd9e | all_diag %in% icdv) & !(all_diag %in% icd10v))
-
-icd9vector <- icd9Only$all_diag
-
-```
-
-
-```{r}
-diag <-claimsFull %>%
-  select(CODE_1, SERVICE_TYPE, ED_NOT_NEEDED_PROP, PREVENTABILITY,UNCLASSIFIED_ED, MEMBER_AGE, MEMBER_SEX) %>%
+diag <-claims %>%
+  select(CODE_1, SERVICE_TYPE, ED_NOT_NEEDED_PROP, PREVENTABILITY,UNCLASSIFIED_ED,
+         MEMBER_AGE, MEMBER_SEX, APPROVED_AMT) %>%
   mutate(CODE_FULL = str_remove_all(CODE_1, pattern = "[[:punct:]]"),
          IS_ED = (SERVICE_TYPE == 'ED'),
          IS_OTPT = (SERVICE_TYPE == 'OTPT'),
@@ -78,16 +35,27 @@ NumberOfED = sum(IS_ED),
 NumberOfOTPT = sum(IS_OTPT),
 NumberOfINPT = sum(IS_INPT),
 AverageAGE = mean(MEMBER_AGE, na.rm = TRUE),
-Pct_Female = mean(IS_F))
+Pct_Female = mean(IS_F),
+Amount_Approved = sum(APPROVED_AMT))
 
-#rm(claimsFull)
+#rm(claims)
 ```
 
 I have to do the same thing as above but to CODEs 2 - 5.  Because I don't want them associated with the ED_NN and PREVENTABILITY scores this dataset set needs to be made seperately then union the two and group by code.
 
 ```{r}
-diag2 <- claimsFull %>% 
-  select(starts_with('CODE_'), -CODE_1, SERVICE_TYPE,MEMBER_AGE, MEMBER_SEX) %>% 
+
+claims2 <- claims %>% 
+  select(CLAIM_NUM, starts_with('CODE_'))
+
+
+claims2[2:8] <- lapply(claims2[2:8], is.na)
+claims2[2:8] <- lapply(claims2[2:8], as.numeric)
+claims2 <- claims2 %>% 
+  mutate(Total = 7 - rowSums(.[2:8]))
+
+diag2 <- claims %>% 
+  select(starts_with('CODE_'), -CODE_1, SERVICE_TYPE,MEMBER_AGE, MEMBER_SEX, APPROVED_AMT) %>% 
   gather(starts_with('CODE_'), key = 'KEY', value = 'CODE_1') %>% 
   filter(!is.na(CODE_1)) %>% 
   select(-KEY) %>%   
@@ -103,7 +71,8 @@ NumberOfED = sum(IS_ED),
 NumberOfOTPT = sum(IS_OTPT),
 NumberOfINPT = sum(IS_INPT),
 AverageAGE = mean(MEMBER_AGE, na.rm = TRUE),
-Pct_Female = mean(IS_F))
+Pct_Female = mean(IS_F), 
+Amount_Approved = 0)
 
 #Add the the score columns back as NA
 diag2$ED_NOT_NEEDED_PROP <- NA 

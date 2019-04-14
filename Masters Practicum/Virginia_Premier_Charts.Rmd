@@ -25,36 +25,50 @@ At the request of Medicaid/Medicare insurer Virginia Premier (VP), our Decision 
 ```{r include=FALSE}
 library(tidyverse)
 library(scales)
-claims<- read_csv("Data/claims_ccs_as_code_with_lead_service.csv", 
+claims<- read_csv("Data/claims_ccs_as_code_with_lead_service1.csv", 
         col_types = cols(Asthma = col_number(), 
         CLAIM_SEQ = col_number(), COPD = col_number(), 
         Diabetes = col_number(), HeartFailure = col_number(), 
         Hypertension = col_number(), MoodDisorder = col_number(), 
-        Psychoses = col_number()))
+        Psychoses = col_number(),Dementia = col_number(), 
+        Epilepsy = col_number(), ESRD = col_number(), IHD = col_number(),
+        SubstanceAbuse = col_number(),TIA = col_number()))
+
 
 small <- claims %>% 
-  select(MRN_ALIAS, CLAIM_NUM, MEMBER_SEX, AGE_GROUP, SERVICE_TYPE, Asthma, COPD,
-         Diabetes,HeartFailure,Hypertension, Psychoses, MoodDisorder, CLAIM_SEQ)
+  select(MRN_ALIAS,SERVICE_TYPE, MEMBER_SEX, AGE_GROUP, Asthma, BrainInjury,
+         COPD, Dementia,Diabetes, Epilepsy, ESRD,HeartFailure,Hypertension, IHD,
+         MoodDisorder,Psychoses,SubstanceAbuse,TIA, YEAR)
 
-pivot <- small %>% gather(Condition, value, Asthma, COPD, Diabetes, HeartFailure,
-                          Hypertension, Psychoses, MoodDisorder)
+small[5:18] <- lapply(small[5:18], as.numeric)
 
 rm(claims)
 
-members <- pivot  %>% 
-  group_by(MRN_ALIAS, Condition) %>% 
-  summarise(value = max(value)) %>%
-  spread(Condition, value) %>% 
-  ungroup() %>% 
-  replace(is.na(.), 0) %>%
-  mutate(Total = rowSums(.[2:8]))
+cc <- small %>% 
+  select(-MRN_ALIAS) %>% 
+  group_by(SERVICE_TYPE, AGE_GROUP, MEMBER_SEX, YEAR) %>% 
+  summarise_all(sum, na.rm = TRUE)
 
-small <- small%>% 
-  mutate(Total = rowSums(.[5:11], na.rm = T))
-
-small %>% filter(SERVICE_TYPE == 'ED') %>% count(Total)
+members <- small %>% 
+  select(-SERVICE_TYPE, -YEAR, -MEMBER_SEX, -AGE_GROUP) %>% 
+  group_by(MRN_ALIAS) %>% 
+  summarise_all(max, na.rm = TRUE)
+  
 
 ```
+
+```{r}
+cc_long <- cc %>% 
+  gather(Chronic_Condition, Number_of_Visits,Asthma:TIA)
+
+members[members == '-Inf'] <- 0
+
+members_long <- members %>%
+  gather(Chronic_Condition, Number_of_Members, Asthma:SubstanceAbuse) %>% 
+  group_by(Chronic_Condition) %>% 
+  summarize(Number_of_Members = sum(Number_of_Members, na.rm = TRUE))
+```
+
 
 ```{r}
 small %>% filter(SERVICE_TYPE == 'ED') %>% 
