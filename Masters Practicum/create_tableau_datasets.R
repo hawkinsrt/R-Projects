@@ -1,7 +1,8 @@
 library(tidyverse)
 library(scales)
 source('Custom Functions.R')
-claims<- read_csv("Data/claims_ccs_as_code_with_lead_service1.csv", 
+
+claims<- read_csv("Data/claims_ccs_as_code_with_lead_service.csv", 
                   col_types = cols(Asthma = col_number(), 
                                    CLAIM_SEQ = col_number(), COPD = col_number(), 
                                    Diabetes = col_number(), HeartFailure = col_number(), 
@@ -9,7 +10,6 @@ claims<- read_csv("Data/claims_ccs_as_code_with_lead_service1.csv",
                                    Psychoses = col_number(),Dementia = col_number(), 
                                    Epilepsy = col_number(), ESRD = col_number(), IHD = col_number(),
                                    SubstanceAbuse = col_number(),TIA = col_number()))
-
 
 small <- claims %>% 
   select(MRN_ALIAS,CLAIM_NUM,SERVICE_TYPE, MEMBER_SEX, AGE_GROUP, Asthma, BrainInjury,
@@ -58,5 +58,4 @@ gather(Chronic_Condition, Number_of_Members, Asthma:SubstanceAbuse) %>%
 
 
 write_csv(cc_long, 'chronic_condition.csv')
-write_csv(members_long, 'chronic_condition_by_member.csv')
 write_csv(members3, 'members_costs.csv')

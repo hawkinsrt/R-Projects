@@ -28,7 +28,7 @@ transform_codes(df)
 
 # load lead service dataset and body system
 df <- df %>% 
-  select(CLAIM_NUM,MRN_ALIAS, EPISODE_SEQ, MEMBER_SEX, SERVICE_TYPE)
+  select(CLAIM_NUM,MRN_ALIAS, EPISODE_SEQ, MEMBER_SEX, SERVICE_TYPE, APPROVED_AMT, APPROVED_DAYS)
 
 print('Loading data to be joined')
 suppressWarnings(lead<- read_csv("Data/claim_lead_age_group.csv", 
@@ -74,3 +74,8 @@ print('Saving data, this is the last step!')
 write_csv(full, 'Data/claims_ccs_as_code_with_lead_service.csv', col_names = TRUE)
 print('All done!')
 Sys.sleep(5)
+
+#claims[,4:17] <- lapply(claims[,4:17], as.numeric)
+
+#claims <- claims %>% 
+#  mutate(No_CC = rowSums(.[4:17], na.rm = TRUE))

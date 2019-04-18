@@ -51,31 +51,37 @@ icd9_vector <- function(df){
   return(icd9vector)
 
 }
+
+find_chronic_diagnosis <- function(df){
+  
+  df2 <- df %>% 
+  mutate(TARGET_CONDITION = case_when(
+    str_detect(DIAG_CODE, '^F3|^296') ~ 'MoodDisorder', #Manic, Depressive, Bipolar
+    str_detect(DIAG_CODE, '^F2|^295') ~ 'Psychoses',
+    str_detect(DIAG_CODE, '^J45|^493') ~ 'Asthma',
+    str_detect(DIAG_CODE, '^416|^49[012456]|^50[0-5]|^5064|^508[18]|^I27[89]|^J4[0-4]|^J4[67]|^J6[0-7]|^J684|^J70[13]') ~ 'COPD',
+    str_detect(DIAG_CODE, '^250|^E1[013]') ~ 'Diabetes',
+    str_detect(DIAG_CODE, '^428|^I50') ~ 'HeartFailure',
+    str_detect(DIAG_CODE, '^40[1-5]|^I1[0-5]') ~ 'Hypertension',
+    str_detect(DIAG_CODE, '^290|^2941|^3312|^F0[123]') ~ 'Dementia',
+    str_detect(DIAG_CODE, '^345|^G40') ~ 'Epilepsy',
+    str_detect(DIAG_CODE, '^5856|N186') ~ 'ESRD', # End Stage Renal Disease
+    str_detect(DIAG_CODE, '^41[0-4]|I25') ~ 'IHD', # Ischemic Heart Disease
+    str_detect(DIAG_CODE, '^85[1-4]|^S06') ~ 'BrainInjury',
+    str_detect(DIAG_CODE, '^3623|^430|^431|^433x1|^434x1|^43[56]|^G45[012389]|^H341|^I6[0134]') ~ 'TIA',
+    str_detect(DIAG_CODE, '^2652|^291[12356789]|^303[09]|^305[01]|^3575|^4255|^5353|^571[0_3]|^980|^V113|^F1[0-9]
+|^E52|^F17|^G621|^I426|^K292|^K70[039]|^T51|^Z502|^Z714|^Z72[01]') ~ 'SubstanceAbuse'
+  ))
+  return(df2)
+}
+
 chronic_condition <-function(df, splits = 5){
   
   icd9vector <- icd9_vector(df)
   # import diagnosis_final
   suppressMessages(suppressWarnings(diag <-read_csv('Data/ccs_diag_xwalk.csv')))
   
-  diag <- diag %>% 
-    mutate(TARGET_CONDITION = case_when(
-      str_detect(DIAG_CODE, '^F3|^296') ~ 'MoodDisorder', #Manic, Depressive, Bipolar
-      str_detect(DIAG_CODE, '^F2|^295') ~ 'Psychoses',
-      str_detect(DIAG_CODE, '^J45|^493') ~ 'Asthma',
-      str_detect(DIAG_CODE, '^416|^49[012456]|^50[0-5]|^5064|^508[18]|^I27[89]|^J4[0-4]|^J4[67]|^J6[0-7]|^J684|^J70[13]') ~ 'COPD',
-      str_detect(DIAG_CODE, '^250|^E1[013]') ~ 'Diabetes',
-      str_detect(DIAG_CODE, '^428|^I50') ~ 'HeartFailure',
-      str_detect(DIAG_CODE, '^40[1-5]|^I1[0-5]') ~ 'Hypertension',
-      str_detect(DIAG_CODE, '^290|^2941|^3312|^F0[123]') ~ 'Dementia',
-      str_detect(DIAG_CODE, '^345|^G40') ~ 'Epilepsy',
-      str_detect(DIAG_CODE, '^5856|N186') ~ 'ESRD', # End Stage Renal Disease
-      str_detect(DIAG_CODE, '^41[0-4]|I25') ~ 'IHD', # Ischemic Heart Disease
-      str_detect(DIAG_CODE, '^85[1-4]|^S06') ~ 'BrainInjury',
-      str_detect(DIAG_CODE, '^3623|^430|^431|^433x1|^434x1|^43[56]|^G45[012389]|^H341|^I6[0134]') ~ 'TIA',
-      str_detect(DIAG_CODE, '^2652|^291[12356789]|^303[09]|^3050|^3575|^4255|^5353|^571[0_3]|^980|^V113|^F1[0-9]
-|^E52|^G621|^I426|^K292|^K70[039]|^T51|^Z502|^Z714|^Z721') ~ 'SubstanceAbuse'
-    )) 
-  
+  diag <- find_chronic_diagnosis(diag)
   
   for (i in 1:splits){
     #split dataset into 5 groups for memory purposes
@@ -159,7 +165,6 @@ chronic_condition <-function(df, splits = 5){
   rm(claims6, claimsC, diag, member, file, i, icd9vector, j)
 }
 
-
 transform_codes <-function(df, splits=5){
   icd9vector <- icd9_vector(df)
   
@@ -209,7 +214,9 @@ transform_codes <-function(df, splits=5){
   }
   rm(icd9vector)
 }
+
 createClaimsSmall <- function(){
+  
   claimsFull <- readRDS("Data/claimsCleanFull.RDS")
   # Select the most important columns
   claims <- claimsFull %>%
@@ -238,6 +245,7 @@ createClaimsSmall <- function(){
 }
 
 transform_claims <- function(df, save = TRUE){
+  
   df$YEAR <- as.numeric(df$YEAR)
   
   df2 <- df %>% 
