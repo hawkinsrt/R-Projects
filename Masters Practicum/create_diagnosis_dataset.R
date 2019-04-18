@@ -5,7 +5,21 @@ claims <- read_rds('Data/claimscleanSmall.RDS')
 
 icd9vector <- icd9_vector(claims)
 
-#codes <- transform_claims(claims, save = FALSE)
+claims2 <- claims %>% 
+  select(CLAIM_NUM, starts_with('CODE_'))
+
+claims2[2:8] <- lapply(claims2[2:8], is.na)
+claims2[2:8] <- lapply(claims2[2:8], as.numeric)
+
+claims <- claims2 %>% 
+  mutate(Total = 7 - rowSums(.[2:8])) %>% 
+  select(CLAIM_NUM, Total) %>% 
+  left_join(claims, by = 'CLAIM_NUM')
+
+rm(claims2)
+
+claims <- claims  %>% 
+  mutate(APPROVED_AMT = round(APPROVED_AMT/Total, digits = 2))
 
 diag <-claims %>%
   select(CODE_1, SERVICE_TYPE, ED_NOT_NEEDED_PROP, PREVENTABILITY,UNCLASSIFIED_ED,
@@ -27,22 +41,6 @@ diag <-claims %>%
             Pct_Female = mean(IS_F),
             Amount_Approved = sum(APPROVED_AMT),
             ED_Amount_Approved = sum(ED_Amount_Approved))
-
-claims2 <- claims %>% 
-  select(CLAIM_NUM, starts_with('CODE_'))
-
-claims2[2:8] <- lapply(claims2[2:8], is.na)
-claims2[2:8] <- lapply(claims2[2:8], as.numeric)
-
-claims <- claims2 %>% 
-  mutate(Total = 7 - rowSums(.[2:8])) %>% 
-  select(CLAIM_NUM, Total) %>% 
-  left_join(claims)
-
-rm(claims2)
-
-claims <- claims  %>% 
-  mutate(APPROVED_AMT = APPROVED_AMT/Total)
 
 diag2 <- claims %>% 
   select(starts_with('CODE_'), -CODE_1, SERVICE_TYPE,MEMBER_AGE, MEMBER_SEX, APPROVED_AMT, Total) %>% 
