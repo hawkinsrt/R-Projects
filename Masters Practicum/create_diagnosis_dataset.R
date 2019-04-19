@@ -8,11 +8,11 @@ icd9vector <- icd9_vector(claims)
 claims2 <- claims %>% 
   select(CLAIM_NUM, starts_with('CODE_'))
 
-claims2[2:8] <- lapply(claims2[2:8], is.na)
-claims2[2:8] <- lapply(claims2[2:8], as.numeric)
+claims2[2:ncol(claims2)] <- lapply(claims2[2:ncol(claims2)], is.na)
+claims2[2:ncol(claims2)] <- lapply(claims2[2:ncol(claims2)], as.numeric)
 
 claims <- claims2 %>% 
-  mutate(Total = 7 - rowSums(.[2:8])) %>% 
+  mutate(Total = (ncol(claims2)-1) - rowSums(.[2:ncol(claims2)])) %>% 
   select(CLAIM_NUM, Total) %>% 
   left_join(claims, by = 'CLAIM_NUM')
 
@@ -75,7 +75,6 @@ diag2 <- diag2 %>%
 #Do the columns match up
 names(diag) == names(diag2)
 
-
 diag_full <- diag %>% 
   bind_rows(diag2) %>% 
   group_by(CODE_FULL, ICD_VERSION) %>% 
@@ -109,9 +108,6 @@ code_final2 <- code_final %>%
 code_final2 <- code_final2 %>% 
   select('DIAG_CODE' = CODE_FULL,ICD_VERSION,DIAG_CODE_DESC,CCS_CATEGORY, CCS_CATEGORY_DESC,
          everything())
-
-glimpse(code_final2)
-summary(code_final2)
 
 code_final3 <- find_chronic_diagnosis(code_final2)
 

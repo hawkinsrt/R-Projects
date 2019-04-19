@@ -75,7 +75,7 @@ find_chronic_diagnosis <- function(df){
   return(df2)
 }
 
-chronic_condition <-function(df, splits = 5){
+get_chronic_conditions <-function(df, splits = 5){
   
   icd9vector <- icd9_vector(df)
   # import diagnosis_final
@@ -165,7 +165,7 @@ chronic_condition <-function(df, splits = 5){
   rm(claims6, claimsC, diag, member, file, i, icd9vector, j)
 }
 
-transform_codes <-function(df, splits=5){
+impute_ccs <-function(df, splits=5){
   icd9vector <- icd9_vector(df)
   
   for (i in 1:splits){
@@ -215,11 +215,10 @@ transform_codes <-function(df, splits=5){
   rm(icd9vector)
 }
 
-createClaimsSmall <- function(){
+clean_claims <- function(df){
   
-  claimsFull <- readRDS("Data/claimsCleanFull.RDS")
   # Select the most important columns
-  claims <- claimsFull %>%
+  claims <- df %>%
     select(MRN_ALIAS, MEMBER_SEX,MEMBER_AGE,CLAIM_SEQ,EPISODE_SEQ,YEAR, SERVICE_TYPE,
            PLACE_OF_SERVICE_DESC,CODE_1, CODE_2,  CODE_3, CODE_4, CODE_5,CODE_6, CODE_7,
            ED_DISCHARGE_DX_DESC,PREVENTABILITY,ED_NOT_NEEDED_PROP,
@@ -227,7 +226,7 @@ createClaimsSmall <- function(){
            TOB_CATEGORY,APPROVED_DAYS, APPROVED_AMT, CLAIM_NUM) %>%
     filter(PLACE_OF_SERVICE_DESC != 'EMERGENCY ROOM - HOSPITAL'| is.na(PLACE_OF_SERVICE_DESC))
   
-  rm(claimsFull)
+  rm(df)
   
   claims2 <- claims %>% 
     count(CLAIM_NUM) %>% 
@@ -241,10 +240,10 @@ createClaimsSmall <- function(){
     arrange(MRN_ALIAS, CLAIM_SEQ, EPISODE_SEQ)
   
   saveRDS(claims3,'Data/claimsCleanSmall.RDS')
-  rm(claims2,claims3)
+  return(claims3)
 }
 
-transform_claims <- function(df, save = TRUE){
+get_upcoming_visits <- function(df, save = TRUE){
   
   df$YEAR <- as.numeric(df$YEAR)
   

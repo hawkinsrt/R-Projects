@@ -6,25 +6,27 @@ print('Lets Import the tidyverse and create a ClaimsSmall.RDS')
 # custom fucntion that downloads and install library if you don't have them, loads it if you do
 ImportLib(tidyverse)
 
+df <- readRDS("Data/claimsCleanFull.RDS")
+
 # remove OTPT claims associated with ED visits, and duplicate claim numbers. Creates claimsCleanSmall.RDS
-createClaimsSmall()
+df <- clean_claims(df)
 
 # read in the new claimsCleanSmall
-df <- read_rds('Data/claimsCleanSmall.RDS')
+#df <- read_rds('Data/claimsCleanSmall.RDS')
 
 #df <- read_csv('Data/claimsCleanSmall.csv', n_max = 1000000)
 
 # Create chronic condition dataset
 print('Assigning chronic conditions to members')
-chronic_condition(df)
+get_chronic_conditions(df)
 
 # add lead service type to claims. Creates claim_lead_age_group.csv
 print('Looking into the future to see if a member goes to the ED in the next 3 visits')
-transform_claims(df)
+get_upcoming_visits(df)
 
 # turn diagnosis code into css_category.
 print('Swapping CCS category for diagnosis code')
-transform_codes(df)
+impute_ccs(df)
 
 # load lead service dataset and body system
 df <- df %>% 
