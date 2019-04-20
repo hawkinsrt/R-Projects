@@ -71,10 +71,10 @@ full <- df %>%
 
 full <- full %>% 
   select(MRN_ALIAS, MEMBER_SEX, AGE_GROUP, Asthma, BrainInjury, COPD, Dementia,Diabetes, Epilepsy, ESRD,
-         HeartFailure,Hypertension, IHD, MoodDisorder,Psychoses,SubstanceAbuse,TIA, CLAIM_SEQ,
-      EPISODE_SEQ, SERVICE_TYPE,ED_NEXT_3, YEAR, everything())
+         HeartFailure,Hypertension, IHD, MoodDisorder,Psychoses,NicotineDependance,SubstanceAbuse,
+         TIA, CLAIM_SEQ,EPISODE_SEQ, SERVICE_TYPE,ED_NEXT_3, YEAR, everything())
 # save
 print('Saving data, this is the last step!')
-write_csv(full, 'Data/claims_ccs_as_code_with_lead_service.csv', col_names = TRUE)
+write_csv(full, 'Data/model_dataset.csv', col_names = TRUE)
 print('All done!')
 Sys.sleep(5)
