@@ -1,20 +1,18 @@
 setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
-source('Custom Functions.R')
+source('custom_functions.R')
 print('Hello')
 print('Lets Import the tidyverse and create a ClaimsSmall.RDS')
 
 # custom fucntion that downloads and install library if you don't have them, loads it if you do
-ImportLib(tidyverse)
+import_lib(tidyverse)
 
-df <- readRDS("Data/claimsCleanFull.RDS")
+df <- read_rds("Data/claimsCleanFull.RDS")
 
 # remove OTPT claims associated with ED visits, and duplicate claim numbers. Creates claimsCleanSmall.RDS
 df <- clean_claims(df)
 
-# read in the new claimsCleanSmall
-#df <- read_rds('Data/claimsCleanSmall.RDS')
-
-#df <- read_csv('Data/claimsCleanSmall.csv', n_max = 1000000)
+# read in the new claimsCleanSmall code testing shortcut
+df <- read_rds('Data/claimsCleanSmall.RDS')
 
 # Create chronic condition dataset
 print('Assigning chronic conditions to members')
@@ -28,12 +26,16 @@ get_upcoming_visits(df)
 print('Swapping CCS category for diagnosis code')
 impute_ccs(df)
 
+# bin member ages
+print('Bin member age into groups')
+df <- group_ages(df)
+
 # load lead service dataset and body system
 df <- df %>% 
   select(CLAIM_NUM,MRN_ALIAS, EPISODE_SEQ, MEMBER_SEX, SERVICE_TYPE, APPROVED_AMT, APPROVED_DAYS)
 
 print('Loading data to be joined')
-suppressWarnings(lead<- read_csv("Data/claim_lead_age_group.csv", 
+suppressWarnings(lead<- read_csv("Data/claims_ed_next_3.csv", 
                 col_types = cols(AGE_GROUP = col_character(), 
                                  CLAIM_NUM = col_character(), LEAD_EPISODE = col_integer(), 
                                  LEAD_YEAR = col_integer(), MRN_ALIAS = col_character(), 
@@ -46,7 +48,7 @@ ccs <- read_csv("Data/claim_ccs_category.csv",
                                  CODE_5 = col_character(), CODE_6 = col_character(), 
                                  CODE_7 = col_character()))
 
-chronic <- suppressWarnings(read_csv("Data/claim_target_condition.csv", 
+chronic <- suppressWarnings(read_csv("Data/claim_chronic_condition.csv", 
                     col_types = cols(Asthma = col_integer(), 
                                      CLAIM_NUM = col_character(), CLAIM_SEQ = col_integer(), 
                                      COPD = col_integer(), Diabetes = col_integer(), 
@@ -76,8 +78,3 @@ print('Saving data, this is the last step!')
 write_csv(full, 'Data/claims_ccs_as_code_with_lead_service.csv', col_names = TRUE)
 print('All done!')
 Sys.sleep(5)
-
-#claims[,4:17] <- lapply(claims[,4:17], as.numeric)
-
-#claims <- claims %>% 
-#  mutate(No_CC = rowSums(.[4:17], na.rm = TRUE))

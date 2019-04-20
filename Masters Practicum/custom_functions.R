@@ -28,6 +28,8 @@ icd9_vector <- function(df){
   #create a icd9_vector to label diag codes as version 9 or version 10
   #this might be redundant because ccs xwalk as the version number but I like to use
   #version number to join on just to be safe
+  
+  #Columns Required:Diagnosis columns with punucation and named as CODE_1, CODE_2
   all_diag_df <- df %>% 
   select(starts_with('CODE_'))
 
@@ -55,7 +57,7 @@ icd9_vector <- function(df){
 find_chronic_diagnosis <- function(df){
   
   df2 <- df %>% 
-  mutate(TARGET_CONDITION = case_when(
+  mutate(CHRONIC_CONDITION = case_when(
     str_detect(DIAG_CODE, '^F3|^296') ~ 'MoodDisorder', #Manic, Depressive, Bipolar
     str_detect(DIAG_CODE, '^F2|^295') ~ 'Psychoses',
     str_detect(DIAG_CODE, '^J45|^493') ~ 'Asthma',
@@ -68,9 +70,11 @@ find_chronic_diagnosis <- function(df){
     str_detect(DIAG_CODE, '^5856|N186') ~ 'ESRD', # End Stage Renal Disease
     str_detect(DIAG_CODE, '^41[0-4]|I25') ~ 'IHD', # Ischemic Heart Disease
     str_detect(DIAG_CODE, '^85[1-4]|^S06') ~ 'BrainInjury',
+    str_detect(DIAG_CODE, '^^F17|^305[01]|^T652') ~ 'NicotineDependance',
     str_detect(DIAG_CODE, '^3623|^430|^431|^433x1|^434x1|^43[56]|^G45[012389]|^H341|^I6[0134]') ~ 'TIA',
-    str_detect(DIAG_CODE, '^2652|^291[12356789]|^303[09]|^305[01]|^3575|^4255|^5353|^571[0_3]|^980|^V113|^F1[0-9]
-|^E52|^F17|^G621|^I426|^K292|^K70[039]|^T51|^Z502|^Z714|^Z72[01]') ~ 'SubstanceAbuse'
+    str_detect(DIAG_CODE, '^2652|^291[12356789]|^303[09]|^3575|^4255|^5353|^571[0_3]|^980|^V113|^F1[0-9]
+|^E52|^G621|^I426|^K292|^K70[039]|^T51|^Z502|^Z714|^Z72[01]') ~ 'SubstanceAbuse'
+    
   ))
   return(df2)
 }
@@ -115,21 +119,21 @@ get_chronic_conditions <-function(df, splits = 5){
     
     # Get only MRN_ALIAS that have a Chronic condition
     claimsC <- claims3 %>% 
-      filter(!is.na(TARGET_CONDITION)) %>% 
+      filter(!is.na(CHRONIC_CONDITION)) %>% 
       count(MRN_ALIAS) %>% 
       select(-n)
     
     claims3$YEAR <- as.numeric(as.character(claims3$YEAR))
     
     claims3 <-  claims3 %>% 
-      mutate(YEAR.CC = ifelse(!is.na(TARGET_CONDITION),YEAR, NA))
+      mutate(YEAR.CC = ifelse(!is.na(CHRONIC_CONDITION),YEAR, NA))
     
     suppressWarnings(claims4 <- claims3 %>% 
                        filter(MRN_ALIAS %in% claimsC$MRN_ALIAS) %>% 
-                       select(MRN_ALIAS,TARGET_CONDITION, YEAR.CC) %>% 
-                       group_by(MRN_ALIAS,TARGET_CONDITION) %>% 
+                       select(MRN_ALIAS,CHRONIC_CONDITION, YEAR.CC) %>% 
+                       group_by(MRN_ALIAS,CHRONIC_CONDITION) %>% 
                        summarise(YEAR.CC = min(YEAR.CC, na.rm = T)) %>% 
-                       spread(TARGET_CONDITION, YEAR.CC))
+                       spread(CHRONIC_CONDITION, YEAR.CC))
     
     rm(claims3)
     
@@ -153,7 +157,7 @@ get_chronic_conditions <-function(df, splits = 5){
       claims6[,j] <- ifelse(claims6[,j] <= claims6$YEAR, 1, NA)
     }
     
-    file <- 'Data/claim_target_condition.csv'
+    file <- 'Data/claim_chronic_condition.csv'
     if(i == 1){
       write_csv(claims6, file, col_names = TRUE)
     }else{
@@ -243,25 +247,9 @@ clean_claims <- function(df){
   return(claims3)
 }
 
-get_upcoming_visits <- function(df, save = TRUE){
-  
-  df$YEAR <- as.numeric(df$YEAR)
-  
-  df2 <- df %>% 
-    group_by(MRN_ALIAS) %>% 
-    mutate(NEXT_SERVICE = lead(SERVICE_TYPE, n = 1), #1 visit into the future
-           NEXT_SERVICE2 = lead(SERVICE_TYPE, n = 2), #2 visits into the future
-           NEXT_SERVICE3 = lead(SERVICE_TYPE, n = 3),
-           YEAR_NEXT_SERVICE3 = lead(YEAR, n=3)) %>% #3 visits into the future
-    ungroup() %>%  
-    select(CLAIM_NUM,MRN_ALIAS, NEXT_SERVICE, NEXT_SERVICE2, NEXT_SERVICE3,YEAR,
-           YEAR_NEXT_SERVICE3, MEMBER_AGE) %>% #select only imporatant columns
-    mutate(ED_NEXT_3 = ifelse((NEXT_SERVICE == 'ED' | NEXT_SERVICE2 == 'ED' | 
-                                NEXT_SERVICE3 == 'ED'), 1, 0)& YEAR >= YEAR_NEXT_SERVICE3 - 1) %>% # if any of next 3 visit is ED then 1
-    select(-starts_with('NEXT_SERVICE'))
-  
+group_ages <- function(df){
   # create bins for age
-  df3 <- df2 %>% 
+  df2 <- df %>% 
     mutate(AGE_GROUP = case_when(
       MEMBER_AGE <= 2 ~ 'Baby',
       MEMBER_AGE <= 5 ~ 'PreSchool',
@@ -273,18 +261,43 @@ get_upcoming_visits <- function(df, save = TRUE){
       MEMBER_AGE <= 78 ~ 'Senior',
       TRUE ~ 'Very Senior')) 
   
-  df4<- df3 %>% 
+  df3<- df2 %>% 
     select(-MEMBER_AGE) # remove MEMBER_AGE column
+  return(df3)
+}
+
+get_upcoming_visits <- function(df, save = TRUE, visits = 3){
+  
+  df$YEAR <- as.numeric(df$YEAR)
+  
+  df <- df %>% 
+    select(CLAIM_NUM, MRN_ALIAS, SERVICE_TYPE, YEAR, CLAIM_SEQ) %>% 
+    arrange(MRN_ALIAS, CLAIM_SEQ)
+
+  df2 <- df %>% 
+    group_by(MRN_ALIAS) %>% 
+    mutate(NEXT_SERVICE = lead(SERVICE_TYPE, n = 1), #1 visit into the future
+           NEXT_SERVICE2 = lead(SERVICE_TYPE, n = 2), #2 visits into the future
+           NEXT_SERVICE3 = lead(SERVICE_TYPE, n = 3),
+           YEAR_NEXT_SERVICE3 = lead(YEAR, n=3)) %>% #3 visits into the future
+    ungroup() %>%  
+    select(CLAIM_NUM,MRN_ALIAS, NEXT_SERVICE, NEXT_SERVICE2, NEXT_SERVICE3,YEAR,
+           YEAR_NEXT_SERVICE3) %>% #select only imporatant columns
+    mutate(ED_NEXT_3 = ifelse((NEXT_SERVICE == 'ED' | NEXT_SERVICE2 == 'ED' | 
+                                NEXT_SERVICE3 == 'ED'), 1, 0)& YEAR >= YEAR_NEXT_SERVICE3 - 1) %>% # if any of next 3 visit is ED then 1
+    select(-starts_with('NEXT_SERVICE'))
+  
   if(save == TRUE){
-  write_csv(df4,'Data/claim_lead_age_group.csv', col_names = TRUE) #save to Data folder
-  remove(df,df2, df3,df4) #clear up some memory
+  cat('Data/claims_ed_next_3.csv was save to the Data folder\n')
+  write_csv(df2,'Data/claims_ed_next_3.csv', col_names = TRUE) #save to Data folder
+  remove(df,df2) #clear up some memory
   }else{
-    return(df4)
+    return(df2)
   }
 }
 
 ## Writen by Michael Behrend
-ImportLib = function(PackageName) {
+import_lib = function(PackageName) {
   # store the package name in a variable
   strLib = deparse(substitute(PackageName))
   # check to see if the package is installed

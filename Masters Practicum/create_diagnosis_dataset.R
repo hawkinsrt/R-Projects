@@ -1,5 +1,5 @@
-library(tidyverse)
-source('Custom Functions.R')
+source('custom_functions.R')
+import_lib(tidyverse)
 
 claims <- read_rds('Data/claimscleanSmall.RDS')
 
@@ -24,14 +24,14 @@ claims <- claims  %>%
 diag <-claims %>%
   select(CODE_1, SERVICE_TYPE, ED_NOT_NEEDED_PROP, PREVENTABILITY,UNCLASSIFIED_ED,
          MEMBER_AGE, MEMBER_SEX, APPROVED_AMT) %>%
-  mutate(CODE_FULL = str_remove_all(CODE_1, pattern = "[[:punct:]]"),
+  mutate(DIAG_CODE = str_remove_all(CODE_1, pattern = "[[:punct:]]"),
          IS_ED = (SERVICE_TYPE == 'ED'),
          IS_OTPT = (SERVICE_TYPE == 'OTPT'),
          IS_INPT = (SERVICE_TYPE == 'INPT'),
          IS_F = (MEMBER_SEX == 'F'),
          ED_Amount_Approved = ifelse(SERVICE_TYPE == 'ED', APPROVED_AMT, 0),
          ICD_VERSION = ifelse(CODE_1 %in% icd9vector, 9,10)) %>% 
-  group_by(CODE_FULL, ICD_VERSION)%>%
+  group_by(DIAG_CODE, ICD_VERSION)%>%
   summarize(ED_NOT_NEEDED_PROP = mean(ED_NOT_NEEDED_PROP, na.rm = TRUE), PREVENTABILITY = mean(PREVENTABILITY,na.rm = TRUE),
             UNCLASSIFIED_ED = mean(UNCLASSIFIED_ED,na.rm = TRUE),NumberOfClaims = n(),
             NumberOfED = sum(IS_ED),
@@ -46,14 +46,14 @@ diag2 <- claims %>%
   select(starts_with('CODE_'), -CODE_1, SERVICE_TYPE,MEMBER_AGE, MEMBER_SEX, APPROVED_AMT, Total) %>% 
   gather(starts_with('CODE_'), key = 'KEY', value = 'CODE_1') %>% 
   filter(!is.na(CODE_1)) %>% 
-  mutate(CODE_FULL = str_remove_all(CODE_1, pattern = "[[:punct:]]"),
+  mutate(DIAG_CODE = str_remove_all(CODE_1, pattern = "[[:punct:]]"),
          IS_ED = (SERVICE_TYPE == 'ED'),
          IS_OTPT = (SERVICE_TYPE == 'OTPT'),
          IS_INPT = (SERVICE_TYPE == 'INPT'),
          IS_F = (MEMBER_SEX == 'F'),
     ED_Amount_Approved = ifelse(SERVICE_TYPE == 'ED', APPROVED_AMT, 0),
     ICD_VERSION = ifelse(CODE_1 %in% icd9vector, 9,10)) %>% 
-    group_by(CODE_FULL, ICD_VERSION)%>%
+    group_by(DIAG_CODE, ICD_VERSION)%>%
     summarize(NumberOfClaims = n(),
     NumberOfED = sum(IS_ED),
     NumberOfOTPT = sum(IS_OTPT),
@@ -70,18 +70,18 @@ diag2$UNCLASSIFIED_ED <- NA
 
 #Rearrange columns to match diag
 diag2 <- diag2 %>% 
-  select(CODE_FULL,ICD_VERSION,ED_NOT_NEEDED_PROP,PREVENTABILITY,UNCLASSIFIED_ED,everything())
+  select(DIAG_CODE,ICD_VERSION,ED_NOT_NEEDED_PROP,PREVENTABILITY,UNCLASSIFIED_ED,everything())
 
 #Do the columns match up
 names(diag) == names(diag2)
 
-diag_full <- diag %>% 
+diag_full <- diag %>% #this summarizes counts where code appears anywhere in claim
   bind_rows(diag2) %>% 
-  group_by(CODE_FULL, ICD_VERSION) %>% 
+  group_by(DIAG_CODE, ICD_VERSION) %>% 
   summarize(ED_NOT_NEEDED_PROP = mean(ED_NOT_NEEDED_PROP, na.rm = TRUE),
   PREVENTABILITY = mean(PREVENTABILITY,na.rm = TRUE),
   UNCLASSIFIED_ED = mean(UNCLASSIFIED_ED,na.rm = TRUE),
-  NumberOfClaims = sum(NumberOfClaims),
+  NumberOfClaims = sum(NumberOfClaims), 
   NumberOfED = sum(NumberOfED),
   NumberOfOTPT = sum(NumberOfOTPT),
   NumberOfINPT = sum(NumberOfINPT),
@@ -91,24 +91,43 @@ diag_full <- diag %>%
   Amount_Approved_Mean = round(mean(Amount_Approved), digits = 2),
   ED_Amount_Approved = round(sum(ED_Amount_Approved), digits = 2))
 
-cx <- read_csv('Data/ccs_diag_xwalk.csv')
+# This summarize counts for Primary (Code_1) and Secondary (Code_n+1)
+diag <- diag %>% group_by(DIAG_CODE, ICD_VERSION) %>% 
+  summarize(P_NumberOfClaims = sum(NumberOfClaims), 
+            P_NumberOfED = sum(NumberOfED),
+            P_NumberOfOTPT = sum(NumberOfOTPT),
+            P_NumberOfINPT = sum(NumberOfINPT)) %>% 
+  select(DIAG_CODE, ICD_VERSION,starts_with('P_'))
 
-names(cx)[names(cx) == 'DIAG_CODE'] <- 'CODE_FULL'
+diag2 <- diag2 %>% group_by(DIAG_CODE, ICD_VERSION) %>% 
+  summarize(S_NumberOfClaims = sum(NumberOfClaims), 
+            S_NumberOfED = sum(NumberOfED),
+            S_NumberOfOTPT = sum(NumberOfOTPT),
+            S_NumberOfINPT = sum(NumberOfINPT)) %>% 
+  select(DIAG_CODE, ICD_VERSION, starts_with('S_'))
 
-diag3 <- diag_full %>% 
-  inner_join(cx)
+diag_full <- diag_full %>% 
+  left_join(diag, by = c('DIAG_CODE', 'ICD_VERSION')) %>% 
+  left_join(diag2, by = c('DIAG_CODE', 'ICD_VERSION'))
 
+# Calculate Prevenatable and Not Needed ED visits, only for codes with a Score
 code_final <- diag_full %>% 
   mutate(NumberOfED_NN = ifelse(!is.na(ED_NOT_NEEDED_PROP), round(ED_NOT_NEEDED_PROP * NumberOfED), -1),
          NumberOfED_PRV = ifelse(!is.na(PREVENTABILITY), round(PREVENTABILITY * NumberOfED), -1))
 
-code_final2 <- code_final %>% 
-  left_join(cx, by = c('CODE_FULL' = 'CODE_FULL', 'ICD_VERSION' = 'ICD_VERSION'))
+# Import CCS crosswalk
+cx <- read_csv('Data/ccs_diag_xwalk.csv')
 
+# Join dataset to CCS Crosswalk
+code_final2 <- code_final %>% 
+  left_join(cx, by = c('DIAG_CODE','ICD_VERSION'))
+
+# Rearrange columns
 code_final2 <- code_final2 %>% 
-  select('DIAG_CODE' = CODE_FULL,ICD_VERSION,DIAG_CODE_DESC,CCS_CATEGORY, CCS_CATEGORY_DESC,
+  select(DIAG_CODE,ICD_VERSION,DIAG_CODE_DESC,CCS_CATEGORY, CCS_CATEGORY_DESC,
          everything())
 
+# Determine is diagnosis is considered chronic
 code_final3 <- find_chronic_diagnosis(code_final2)
 
-write.csv(code_final3, 'Data/diagnosis_final.csv')
+write.csv(code_final3, 'Data/diagnosis_analysis.csv')
