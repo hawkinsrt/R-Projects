@@ -1,0 +1,228 @@
+---
+title: "Business Process Analysis"
+author: "Ryan Hawkins"
+date: "February 4, 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction to process analysis
+
+### Retrieve basic process information
+
+The event log patients has been preloaded, which contains information about patients treated in a hospital in a given period. The cases of the process are individual patients and the medical and administrative actions which are performed in the hospital are the activities.
+
+The function slice() can be used to take a slice of cases out of the event data. slice(x, 1:10) will select the first ten cases in the event log "x", where first is defined by the current ordering of the data.
+
+```{r message=FALSE, warning=FALSE}
+library(bupaR)
+
+# How many patients are there?
+n_cases(patients)
+
+# Print the summary of the data
+summary(patients)
+
+# Show the journey of the first patient
+slice(patients, patients$patient == 1)
+```
+
+### Explore activities
+
+Activities are one of the most important elements of a process. Let's look at the activities in the patients event log.
+
+```{r}
+# How many distinct activities are there?
+n_activities(patients)
+
+# What are the names of the activities?
+activity_labels(patients)
+
+# Create a list of activities
+activities(patients)
+```
+
+### The happy path
+
+Although a process may contain only a limited set of activities, the number of possible flows is typically huge! In real-life situations, a lot of activities can take place in any order and can be repeated a certain number of times.
+
+The sequence of activities performed in relation to one case is called its trace, literally the trace that the process instance leaves in our data. Instances of the same process can have very different traces. However, we will typically find one or more very common ones. These frequent sequences are also called the happy path(s) of the process.
+
+Let's have a look at the journey of the patients in the hospital!
+
+```{r}
+# Have a look at the different traces
+traces(patients)
+
+# How many are there?
+n_traces(patients)
+
+# Visualize the traces using trace_explorer
+trace_explorer(patients, coverage = 1)
+```
+
+### Create process maps
+
+Another way to visualize processes is by constructing a process map.
+
+A process map is a directed graph that shows the activities of the process and the flows between them. The colors of the nodes and the thickness of the arrows indicate the most frequent activities and process flows.
+
+```{r message=FALSE, warning=FALSE}
+# Draw process map
+process_map(patients)
+```
+
+
+## Analysis techniques
+
+### Specialization of resources
+
+In the following exercises, we will look at the employees working in a hospital which are treating patients with Sepsis, a life-threatening condition caused by an infection. Treating these patients is of the utmost importance. Let's see how tasks are divided. The event data is preloaded and called sepsis.
+
+Firstly, we will calculate some process metrics. A process metric is a function which quantifies a certain aspect of the process, like resource_frequency(). It can do this at different levels of granularity, of which there are 6 possibilities in total: "log", "case", "trace", "activity", "resource", and "resource-activity".
+
+There are 3 different metrics relevant for resources: In this exercise we will look at resource frequency.
+
+```{r}
+# Calculate frequency of resources
+frequencies_of_resources <- resource_frequency(sepsis, level = 'resource')
+
+# See the result
+frequencies_of_resources
+
+# See the result as a plot
+plot(frequencies_of_resources)
+
+```
+
+```{r}
+
+# Calculate frequency of resources
+frequencies_of_resources <- resource_frequency(sepsis, level = 'activity')
+
+# See the result
+frequencies_of_resources
+
+# See the result as a plot
+plot(frequencies_of_resources)
+```
+
+```{r}
+# Calculate frequency of resources
+frequencies_of_resources <- resource_frequency(sepsis, level = 'resource-activity')
+
+# See the result
+frequencies_of_resources
+
+# See the result as a plot
+plot(frequencies_of_resources)
+```
+
+### Involvement of resources
+
+We already saw that some resources are more active that others in terms of frequency. But another thing that can be measured is their involvement.
+
+Involvement refers to the number of cases a resource works on, irrespective of his/her total workload. A doctor, for instance, might not be the one executing most of the activities when compared to nurses, but might still prefer to have a high involvement, being up-to-date and in touch with all his patients.
+
+resource_involvement is another metric, just like resource_frequency which can be computed at different levels of granularity: "case", "resource", and "resource-activity".
+
+```{r}
+# Calculate resource involvement
+involvement_of_resources <- resource_involvement(sepsis, level = 'resource')
+
+# See the result
+involvement_of_resources
+
+# Show the result in a plot
+plot(involvement_of_resources)
+```
+
+### Process variants
+
+Investigate the structure of the sepsis process by answering the following questions. The sepsis data has already been prepared.
+
+bupaR is designed to be pipe-friendly. In the second step, you'll see an example of chaining commands together using the pipe operator, %>%.
+
+```{r}
+# Explore traces with 10% coverage
+trace_explorer(sepsis, coverage = .1)
+
+# Calculate the average trace length
+trace_length(sepsis)
+
+sepsis %>% 
+  # Check the activity presence
+  activity_presence() %>% 
+  # Plot the results
+  plot()
+```
+
+### Rework
+
+When looking at the structure of a process, an interesting aspect to look at is rework. Rework happens when the same activity is repeated within a single case, which often points towards time and resources which are wasted, and typically a mistake which has to be rectified.
+
+We can distinguish between two different types of rework: 1) immediate rework, we are also known as self-loops of activities, and 2) rework which surfaces later in the process, which we call repetitions. In this exercise, we will focus on the latter.
+
+The number_of_repetitions is a metric which can be calculated for
+
+the whole event "log",
+each "case",
+each "activity",
+each "resource", or
+each "resource-activity" pair.
+
+```{r message=FALSE, warning=FALSE}
+# Min, max and average number of repetitions
+number_of_repetitions(sepsis, level = 'log')
+
+# Number of repetitions per resource
+number_of_repetitions(sepsis, level = 'resource')
+
+# Number of repetitions per activity
+n_reps_per_activity <- number_of_repetitions(sepsis, level = 'activity')
+
+# See the result
+n_reps_per_activity
+
+# See the result in a plot
+plot(n_reps_per_activity)
+```
+
+
+
+```{r}
+# Draw a process map of median performance in hours
+patients %>% 
+  process_map(type = performance(FUN = median, units = 'hours'))
+
+patients %>% 
+  # Calculate variation in processing times of activity durations
+  processing_time(level = 'activity') %>% 
+  # Plot it
+  plot()
+
+# Draw a dotted chart of relative data sorted by start day
+patients %>% 
+  dotted_chart(x = "relative_day", sort = "start_day", units = "secs")
+```
+
+
+```{r}
+# Time per activity
+patients %>% 
+  processing_time(level = "activity") %>% 
+  plot()
+
+
+# Average duration of recordings
+patients %>% 
+  throughput_time(level = 'log', units = "hours")
+
+
+# Missing activities
+patients %>% 
+  idle_time(level = 'log', units = 'hours')
+```
